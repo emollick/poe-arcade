@@ -1,10 +1,136 @@
 <!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>The Poe Arcade</title>
-<!-- PLACEHOLDER LAUNCHER. Another worker builds this. Overwrite entirely. -->
+<title>A Cabinet of Poe</title>
+<meta name="description" content="Nine amusements after the tales of Edgar Allan Poe: a cabinet of curiosities holding nine small games, each built on a different technology.">
+<meta property="og:title" content="A Cabinet of Poe">
+<meta property="og:description" content="Nine amusements after the tales of Edgar Allan Poe. Open a drawer.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="A Cabinet of Poe">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0a0705">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0705'/%3E%3Cpath fill='%23e8e2d4' d='M18 50c-3-8 0-18 9-23 3-8 9-13 16-13l10 3-8 2c1 7-1 13-6 16 3 6 0 12-6 14l-3 8 0-8c-5 3-9 3-12 1z'/%3E%3Ccircle cx='39' cy='19' r='1.4' fill='%230a0705'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/shared/fonts.css">
 <link rel="stylesheet" href="/shared/poe.css">
-<body style="display:grid;place-items:center;height:100%;color:#e8e2d4;font-family:'IM Fell English',serif">
-  <p style="font-size:clamp(20px,5vw,34px)">launcher pending</p>
+<link rel="stylesheet" href="/launcher/launcher.css">
+</head>
+<body>
+
+<div class="room" id="room">
+  <aside class="bookcase" id="bookcase" aria-hidden="true"></aside>
+  <div class="floor" aria-hidden="true"></div>
+  <div class="glow" aria-hidden="true"></div>
+
+  <main class="stage" id="stage">
+    <section class="cabinet" id="cabinet" aria-label="The cabinet">
+      <header class="pediment wood-h">
+        <div class="cornice wood-h" aria-hidden="true"></div>
+        <svg class="finial" viewBox="0 0 140 34" aria-hidden="true">
+          <defs><linearGradient id="finGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6e2a0"/><stop offset=".5" stop-color="#b48b34"/><stop offset="1" stop-color="#6e5120"/></linearGradient></defs>
+          <path d="M70 2 C 66 10, 60 14, 52 16 C 44 18, 36 22, 30 30 L 110 30 C 104 22, 96 18, 88 16 C 80 14, 74 10, 70 2 Z" fill="url(#finGold)" stroke="#3a2708" stroke-width=".8"/>
+          <circle cx="70" cy="17" r="4.5" fill="#7a0f12" stroke="#f6e2a0" stroke-width="1"/>
+          <path d="M8 32 Q 40 20 70 30 Q 100 20 132 32" fill="none" stroke="url(#finGold)" stroke-width="2"/>
+        </svg>
+        <h1>A Cabinet of Poe</h1>
+        <p class="sub">nine amusements, after the tales of Edgar Allan Poe</p>
+      </header>
+
+      <div class="case wood">
+        <div class="interior">
+          <ol class="drawers" id="drawers" aria-label="Nine games"></ol>
+        </div>
+        <div class="doors" aria-hidden="true">
+          <div class="door left"><div class="pane"><div class="flame-reflection"></div></div><i class="rail t"></i><i class="rail b"></i><i class="rail l"></i><i class="rail r"></i><i class="mullion m1"></i><i class="mullion m2"></i><i class="knob"></i></div>
+          <div class="door right"><div class="pane"><div class="flame-reflection"></div></div><i class="rail t"></i><i class="rail b"></i><i class="rail l"></i><i class="rail r"></i><i class="mullion m1"></i><i class="mullion m2"></i><i class="knob"></i></div>
+        </div>
+      </div>
+
+      <div class="plinth wood-h">
+        <span class="latch-hint" id="hint">click, or press a key, to open the cabinet</span>
+      </div>
+    </section>
+
+    <aside class="table" aria-hidden="true">
+      <svg viewBox="0 0 300 520">
+        <defs>
+          <radialGradient id="halo" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffb347" stop-opacity=".55"/><stop offset=".4" stop-color="#ff8a2a" stop-opacity=".18"/><stop offset="1" stop-color="#ff7a1a" stop-opacity="0"/></radialGradient>
+          <radialGradient id="flameG" cx=".5" cy=".75" r=".6"><stop offset="0" stop-color="#fffbe6"/><stop offset=".35" stop-color="#ffd76a"/><stop offset=".75" stop-color="#ff8a1c"/><stop offset="1" stop-color="#ff5a00" stop-opacity=".0"/></radialGradient>
+          <linearGradient id="wax" x1="0" x2="1"><stop offset="0" stop-color="#b9a97f"/><stop offset=".35" stop-color="#f3e9c8"/><stop offset=".7" stop-color="#e2d3a6"/><stop offset="1" stop-color="#8a7a55"/></linearGradient>
+          <linearGradient id="brassV" x1="0" x2="1"><stop offset="0" stop-color="#5a4318"/><stop offset=".4" stop-color="#f2dc8e"/><stop offset=".6" stop-color="#c9a54d"/><stop offset="1" stop-color="#4a3410"/></linearGradient>
+          <linearGradient id="tableTop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6b3418"/><stop offset="1" stop-color="#2b130a"/></linearGradient>
+          <linearGradient id="leg" x1="0" x2="1"><stop offset="0" stop-color="#1b0c06"/><stop offset=".5" stop-color="#5a2a12"/><stop offset="1" stop-color="#1b0c06"/></linearGradient>
+        </defs>
+        <!-- side table -->
+        <ellipse cx="150" cy="300" rx="112" ry="26" fill="url(#tableTop)"/>
+        <ellipse cx="150" cy="292" rx="112" ry="26" fill="#7a3d1a"/>
+        <ellipse cx="150" cy="292" rx="104" ry="20" fill="#5a2a12"/>
+        <ellipse cx="150" cy="292" rx="104" ry="20" fill="none" stroke="rgba(255,214,160,.25)" stroke-width="1"/>
+        <rect x="136" y="312" width="28" height="150" rx="6" fill="url(#leg)"/>
+        <ellipse cx="150" cy="338" rx="22" ry="7" fill="#3a1a0c"/>
+        <ellipse cx="150" cy="376" rx="18" ry="6" fill="#3a1a0c"/>
+        <path d="M150 455 L 78 505 L 92 512 L 150 470 L 208 512 L 222 505 Z" fill="#2b130a"/>
+        <path d="M150 455 L 150 512 L 164 512 L 158 470 Z" fill="#1b0c06"/>
+        <!-- book on the table -->
+        <path d="M184 282 l40 -8 l6 12 l-40 8 z" fill="#3a1a1a"/>
+        <path d="M184 282 l40 -8 l1 2 l-40 8 z" fill="#e8dcc0"/>
+        <!-- candlestick -->
+        <ellipse cx="150" cy="286" rx="30" ry="8" fill="url(#brassV)"/>
+        <ellipse cx="150" cy="282" rx="30" ry="8" fill="url(#brassV)"/>
+        <ellipse cx="150" cy="282" rx="22" ry="5" fill="#8a6a2a"/>
+        <rect x="142" y="238" width="16" height="46" fill="url(#brassV)"/>
+        <ellipse cx="150" cy="238" rx="12" ry="4" fill="url(#brassV)"/>
+        <ellipse cx="150" cy="246" rx="16" ry="5" fill="url(#brassV)"/>
+        <ellipse cx="150" cy="226" rx="18" ry="6" fill="url(#brassV)"/>
+        <rect x="132" y="216" width="36" height="10" fill="url(#brassV)"/>
+        <ellipse cx="150" cy="216" rx="18" ry="6" fill="#6e5120"/>
+        <!-- candle -->
+        <rect x="138" y="132" width="24" height="86" rx="3" fill="url(#wax)"/>
+        <path d="M138 140 c 0 -6 24 -6 24 0 c -4 3 -20 3 -24 0 z" fill="#f7efd6"/>
+        <path d="M140 150 c -3 10 -3 22 0 30 c 1 3 3 2 3 -1 c -1 -10 0 -20 -3 -29 z" fill="#f7efd6" opacity=".9"/>
+        <path d="M159 160 c 3 8 3 14 1 20 c -1 3 -3 2 -3 -1 c 1 -6 1 -12 2 -19 z" fill="#f7efd6" opacity=".8"/>
+        <line x1="150" y1="134" x2="150" y2="122" stroke="#1a1208" stroke-width="2.4" stroke-linecap="round"/>
+        <!-- flame -->
+        <g class="flame-halo"><circle cx="150" cy="110" r="90" fill="url(#halo)"/></g>
+        <g class="flame">
+          <path d="M150 74 C 168 96, 168 120, 150 128 C 132 120, 132 96, 150 74 Z" fill="url(#flameG)"/>
+          <path d="M150 96 C 158 108, 158 120, 150 126 C 142 120, 142 108, 150 96 Z" fill="#fff8dc" opacity=".9"/>
+          <ellipse cx="150" cy="124" rx="5" ry="4" fill="#5aa0ff" opacity=".45"/>
+        </g>
+        <circle id="flame-pt" cx="150" cy="108" r="1" fill="none"/>
+      </svg>
+    </aside>
+  </main>
+
+  <div class="glow-over" aria-hidden="true"></div>
+
+  <footer class="foot">
+    <a href="./" aria-label="A Cabinet of Poe, the root of the collection">the cabinet</a>
+    <span class="sep" aria-hidden="true">·</span>
+    <button type="button" id="about-btn" aria-expanded="false" aria-controls="about">about</button>
+    <span class="sep" aria-hidden="true">·</span>
+    <button type="button" id="sound" class="sound" aria-pressed="false">
+      <svg class="on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4zm11.5 3a3.5 3.5 0 0 0-2-3.15v6.3a3.5 3.5 0 0 0 2-3.15zM13.5 4.2v2.1a6 6 0 0 1 0 11.4v2.1a8 8 0 0 0 0-15.6z"/></svg>
+      <svg class="off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4zm12.6 3 2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4z"/></svg>
+      <span class="label">sound</span>
+    </button>
+  </footer>
+
+  <div class="scrim" id="scrim" hidden></div>
+  <section class="about" id="about" hidden aria-label="About the collection">
+    <h2>About the cabinet</h2>
+    <button class="close" type="button" aria-label="Close">close ×</button>
+    <p>Nine small amusements, each after a tale by Edgar Allan Poe, kept in a cabinet of curiosities. Open a drawer and the game is yours for a few minutes; your best result is written on the tag and kept in this browser only.</p>
+    <p>Every specimen was built on a different technology, so no two drawers behave alike:</p>
+    <p class="tech">Web Audio synthesis · three.js · Matter.js physics · raymarched WebGL2 SDFs · GPU particles · a cipher engine on procedural parchment · pure CSS 3D · engraved SVG · a Rust/WebAssembly simulation</p>
+    <p>The launcher itself is SVG joinery, CSS light and one small canvas of dust.</p>
+  </section>
+</div>
+
+<canvas id="dust" aria-hidden="true"></canvas>
+<div id="dim" aria-hidden="true"></div>
+
+<script type="module" src="/launcher/launcher.js"></script>
 </body>
+</html>
