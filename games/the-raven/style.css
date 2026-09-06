@@ -274,7 +274,7 @@ kbd { font-family: 'Cinzel', serif; border: 1px solid var(--ink); padding: 0 5px
   .how { font-size: 14.5px; }
   .title { font-size: 40px; }
   .caption { font-size: 11px; letter-spacing: .26em; }
-  .keys { font-size: 10px; }
+  .keys { font-size: 10px; max-width: 280px; text-wrap: balance; }   /* two balanced lines: never orphans "bring the dawn" */
   #begin, #again { font-size: 13px; padding: 11px 22px; }
   .end-line { font-size: 15.5px; }
 }
