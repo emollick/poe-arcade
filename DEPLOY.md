@@ -11,11 +11,13 @@
 | Admin URL | https://app.netlify.com/projects/poe-arcade |
 | Deploys | https://app.netlify.com/projects/poe-arcade/deploys |
 
-Status (2026-09-06): the site was created through the Netlify connector, but
-the first production deploy has NOT gone out yet. The sandbox this was attempted
-from cannot reach `api.netlify.com` (egress proxy answers 403 to CONNECT), so the
-upload step must be run from a machine with normal network access. Until then
-the production URL serves Netlify's "site not found" page.
+Status: LIVE at https://poe-arcade.netlify.app since 2026-09-06 16:29 UTC. The
+site is linked to GitHub `emollick/poe-arcade` (branch `main`, publish `.`, no
+build command); every push to `main` redeploys automatically (first production
+deploy id 6a9d94ea7956f0d1ada47a4a). Direct uploads from the Claude container
+remain blocked by its network policy, so redeploys go through Git: commit,
+`git push origin main`, and check the deploy state with the Netlify connector's
+get-project / get-deploy-for-site.
 
 ## What gets deployed
 
