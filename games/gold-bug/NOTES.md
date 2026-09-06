@@ -11,6 +11,10 @@
 ## The look
 - Iron-gall ink **#3b2314** on tea-brown parchment **#d8bb8c**; the bug’s gold **#d4a017** is the single accent; plaintext is written in sanguine #8a3319.
 - Type: IM Fell English / IM Fell English SC for passage and headings, Special Elite for the marks. Special Elite has no `‡`, so Kidd’s double dagger is set as `†` with a second bar drawn in CSS.
+- The gold bug is an engraving in the map’s line style: an SVG symbol with iron-gall outlines, gold under two hatch patterns whose density is masked by a radial shading gradient, striae down the elytra, the story’s two jet-black spots at one end and a longer one near the head, six legs, lamellate antennae, and an engraved pin. No drop shadows anywhere on the sheet.
+- The alphabet is a case of printer’s type: Special Elite on 44px slugs a shade darker than the paper, hard-edged, with a one-pixel emboss; used letters sit flat and struck through.
+- The marks are set as large as the sheet allows: `fitText()` in `game.js` starts from the round’s size (desktop 50/40/30px, phone 30/25/20px) and steps down until the whole cipher fits without scrolling (floors: 22px desktop, 17px phone — round 3 on a phone still scrolls). The frequency chart absorbs any slack (150–230px on desktop) so the desk reads full in every round.
+- Phones: the HUD row sits below the shared back pill (`#play` padding-top 60px under 760px wide) so the numeral and the spade clock never collide with it.
 
 ## Rules
 - Three rounds, each with a fresh random alphabet (round 3 always uses Kidd’s real table): 42 / 62 / 95 seconds of rival-walking per round; each decoded key word draws a landmark on the map and pushes him back 5–7 s. A wrong letter bleeds on the page, resets the streak and costs the rival one stride (1.2 s). Stuck 25 s → Legrand lays a finger on a mark (−100). Score = 50 + 10×streak per unaided letter, +100 per landmark, +10 per second to spare at the end of a round.

@@ -123,18 +123,33 @@ function beginRound(i) {
   $('roundName').textContent = S.round.name;
   $('rivalLine').textContent = ['The rival has landed on the shore.', 'The rival is crossing the dunes.', 'The rival is in the woods, beneath the tree.'][i];
   $('rivalLine').classList.remove('late');
-  $('text').style.fontSize = (isPhone() ? [21, 19, 17] : [38, 30, 24])[i] + 'px';
   buildText();
   buildChart();
   buildKeys();
   updateHud();
   $('interlude').hidden = true;
   $('play').hidden = false;
+  fitText();
   addNote(`<b>Round ${ROMAN[i]} · ${S.round.name}</b> — ${S.round.intro}`);
   map.setRival(i / 3, false);
   S.running = true;
   sound.spade(0);
 }
+
+/* The marks are set as large as the sheet allows: start from the round's size
+ * and step down until the whole cipher sits on the page without scrolling. */
+const TEXT_SIZE = { desk: [50, 40, 30], phone: [30, 25, 20] };
+function fitText() {
+  if (!S.cipher || $('play').hidden) return;
+  const box = $('text');
+  const phone = isPhone();
+  let size = (phone ? TEXT_SIZE.phone : TEXT_SIZE.desk)[S.roundIdx];
+  const min = phone ? 17 : 22;
+  box.style.fontSize = size + 'px';
+  while (size > min && box.scrollHeight > box.clientHeight + 1) { size -= 1; box.style.fontSize = size + 'px'; }
+}
+let fitT = 0;
+addEventListener('resize', () => { clearTimeout(fitT); fitT = setTimeout(fitText, 240); }, { passive: true });
 
 function buildText() {
   const box = $('text');
