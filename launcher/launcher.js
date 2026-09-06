@@ -5,42 +5,43 @@ import { fitCanvas, saveState, loadState, prefersReducedMotion } from '/shared/p
 import { SPECIMENS } from './specimens.js';
 
 const GAMES = [
+  /* the hints and blurbs follow each game's NOTES.md; keep them in step */
   { slug: 'tell-tale-heart',  title: 'Under the Boards',    story: 'The Tell-Tale Heart',
     c1: '#0a0908', c2: '#7a0f12',
-    line: 'It is the beating of his hideous heart. Hold your breath while the old man sleeps.',
-    keys: 'keys: space, hold', touch: 'touch: press & hold' },
+    line: 'The officers sit above the boards and the boards keep time. Keep the beat, and keep your composure.',
+    keys: 'keys: space', touch: 'touch: tap' },
   { slug: 'masque-red-death', title: 'Seven Chambers',      story: 'The Masque of the Red Death',
     c1: '#1a0b2e', c2: '#c8102e',
-    line: 'Seven rooms, seven colours; when the ebony clock strikes, the revel must move on.',
-    keys: 'keys: arrows', touch: 'touch: drag' },
+    line: 'The ebony clock strikes and he walks. Reach the next chamber before the last chime.',
+    keys: 'keys: ← → · space to dash', touch: 'touch: hold a side, double-tap to dash' },
   { slug: 'pit-and-pendulum', title: 'The Descending Blade', story: 'The Pit and the Pendulum',
     c1: '#0b0a08', c2: '#c4602a',
-    line: 'Each sweep of the crescent comes a little lower. There is a way out, if you keep your head.',
-    keys: 'keys: ← →', touch: 'touch: swipe' },
+    line: 'Each sweep comes a little lower. Hop the rats, shun the pit, and last until the trumpets.',
+    keys: 'keys: ← → · space to hop', touch: 'touch: tap the sides to walk, the middle to hop' },
   { slug: 'house-of-usher',   title: 'Fissure',             story: 'The Fall of the House of Usher',
     c1: '#1c2230', c2: '#8b1a1a',
-    line: 'A barely perceptible crack runs from the roof to the tarn. Hold the house together while you can.',
-    keys: 'keys: arrows', touch: 'touch: tap' },
+    line: 'A fissure creeps from the roof toward the tarn. Brace each wall as the storm finds it; hold the house up till dawn.',
+    keys: 'keys: click the marks (1–6)', touch: 'touch: tap' },
   { slug: 'maelstrom',        title: 'The Vortex',          story: 'A Descent into the Maelström',
     c1: '#030507', c2: '#b9e6dc',
-    line: 'Into the whirl. The small and the cylindrical sink slowest; choose your barrel with care.',
-    keys: 'keys: ← →', touch: 'touch: drag' },
+    line: 'Into the whirl. Lash yourself to the casks and spars that rise, let go of whatever plunges, and outlast the tide.',
+    keys: 'keys: ← → ↑ space', touch: 'touch: drag, tap' },
   { slug: 'gold-bug',         title: "Kidd's Cipher",       story: 'The Gold-Bug',
     c1: '#d9c39a', c2: '#c9a227',
-    line: "A good glass in the bishop's hostel. Read the bug's message before the tide comes in.",
-    keys: 'keys: type the letters', touch: 'touch: tap the symbols' },
+    line: "Break Captain Kidd's cipher before the rival's spade finds the tree.",
+    keys: 'keys: click a mark, type', touch: 'touch: tap a mark, then a letter' },
   { slug: 'amontillado',      title: 'Brick by Brick',      story: 'The Cask of Amontillado',
     c1: '#0e0d0b', c2: '#d98b2b',
-    line: 'For the love of God, Montresor. Lay every course true before the jester finds the gap.',
-    keys: 'keys: space', touch: 'touch: tap' },
+    line: 'For the love of God, Montresor. Eleven tiers to lay true before the torch burns out.',
+    keys: 'keys: space (hold to listen)', touch: 'touch: tap (hold to listen)' },
   { slug: 'the-raven',        title: 'Nevermore',           story: 'The Raven',
     c1: '#efe6d3', c2: '#111111',
-    line: 'Quoth the Raven. Answer him with the words he wants, and only those, until the lamplight fails.',
-    keys: 'keys: type', touch: 'touch: tap' },
+    line: 'Quoth the Raven. Ask only what you can bear to hear answered Nevermore, before the lamp burns out.',
+    keys: 'keys: 1 · 2 · 3', touch: 'touch: tap a card' },
   { slug: 'black-cat',        title: 'Pluto',               story: 'The Black Cat',
     c1: '#e8dfcf', c2: '#b5c93a',
-    line: 'Something walled up is watching. Find the eye before the eye finds you.',
-    keys: 'keys: arrows', touch: 'touch: swipe' },
+    line: 'The police are in the cellar. Plaster over the damp and the eye before the lantern finds what is in the wall.',
+    keys: 'mouse: drag to plaster', touch: 'touch: drag' },
 ];
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -86,22 +87,39 @@ drawers.innerHTML = GAMES.map((g, i) => {
 /* ---------- the cabinet doors --------------------------------------------- */
 
 const cabinet = $('#cabinet');
+const SWING = 500;                 // ms the doors are given to swing before a click made through them leaves the page
+const PULL = 420;                  // ms the drawer pulls out before the game loads
 let open = isPhone();
+let openedAt = -Infinity;
 if (open) cabinet.classList.add('open');
 
 function openDoors() {
   if (open) return;
   open = true;
+  openedAt = performance.now();
   cabinet.classList.add('open');
   $('#hint').setAttribute('aria-hidden', 'true');
+  stopWaiting();
 }
-$('.case').addEventListener('click', (e) => {
-  if (!open) { e.preventDefault(); openDoors(); }
-});
-addEventListener('keydown', (e) => {
-  if (open || e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.key === 'Enter' || e.key === ' ' || e.key === 'o') { e.preventDefault(); openDoors(); }
-});
+
+/* The closed doors are the poster, not a gate: the first pointer move, any
+ * key, or 1.2s of idling opens them, whichever comes first. Phones never
+ * have doors. `?poster` keeps them shut until a click, for screenshots. */
+const poster = new URLSearchParams(location.search).has('poster');
+let idleTimer = 0;
+const onFirstMove = () => openDoors();
+const onFirstKey = () => openDoors();
+function stopWaiting() {
+  clearTimeout(idleTimer);
+  removeEventListener('pointermove', onFirstMove);
+  removeEventListener('keydown', onFirstKey);
+}
+if (!open && !poster) {
+  addEventListener('pointermove', onFirstMove, { passive: true });
+  addEventListener('keydown', onFirstKey);
+  idleTimer = setTimeout(openDoors, 1200);
+}
+$('.case').addEventListener('click', openDoors);
 
 /* ---------- opening a drawer ---------------------------------------------- */
 
@@ -114,16 +132,17 @@ function enter(li) {
   if (reduced) { location.href = href; return; }
   li.classList.add('pulling');
   dim.classList.add('on');
-  setTimeout(() => { location.href = href; }, 420);
+  // a click that also opened the doors waits for the swing, then goes
+  const wait = Math.max(PULL, openedAt + SWING - performance.now());
+  setTimeout(() => { location.href = href; }, wait);
 }
 
 drawers.addEventListener('click', (e) => {
   const li = e.target.closest('.drawer');
   if (!li) return;
-  if (e.target.closest(".enter")) { enter(li); return; }
+  if (e.target.closest('.enter')) { enter(li); return; }
   const front = e.target.closest('.front');
   if (!front) return;
-  if (!open) return;                       // the case handler opens the doors first
   e.preventDefault();
   if (isPhone()) {
     const was = li.classList.contains('expanded');
@@ -134,6 +153,7 @@ drawers.addEventListener('click', (e) => {
     }
     return;
   }
+  openDoors();                            // a click through the shut doors opens them and still counts
   enter(li);
 });
 drawers.addEventListener('keydown', (e) => {
@@ -143,6 +163,9 @@ drawers.addEventListener('keydown', (e) => {
   e.preventDefault();
   front.click();
 });
+
+/* test hook, as the games have */
+window.__poe = { get open() { return open; }, openDoors };
 
 /* refresh best scores when we come back from a game via bfcache */
 addEventListener('pageshow', (e) => {

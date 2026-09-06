@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 /* poe-arcade — launcher/playtest.mjs
  * Extra launcher screenshots beyond tools/verify.mjs:
+ *   screenshots/launcher-desktop-closed.png   (the poster: doors shut)
  *   screenshots/launcher-desktop-hover.png    (doors open, a drawer hovered)
  *   screenshots/launcher-mobile-expanded.png  (a drawer expanded on the phone)
- * Also reports any console error it sees. Run:  node launcher/playtest.mjs
+ * Asserts that one desktop click on a drawer through the shut doors reaches
+ * the game, that the hover tag never covers another drawer's plate, and
+ * reports any console error it sees. Run:  node launcher/playtest.mjs
  */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -62,20 +65,53 @@ const wire = (page, tag) => {
 const seed = `localStorage.setItem('poe:masque-red-death:best', JSON.stringify({ score: 1842 }));
               localStorage.setItem('poe:the-raven:best', JSON.stringify({ score: 27 }));`;
 
-// desktop: closed doors (poster), then open + hover
+// desktop, doors shut: the poster, then one click on a drawer straight through the
+// shut doors must open them AND reach the game (never be swallowed)
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+  const page = await ctx.newPage(); wire(page, 'desktop-shut');
+  await page.addInitScript(seed);
+  // without ?poster the doors open on their own: first pointer move, any key, or 1.2s idle
+  await page.goto(base + '/index.html?poster', { waitUntil: 'networkidle' });
+  await sleep(1800);
+  if (await page.evaluate(() => window.__poe.open)) problems.push('[desktop-shut] doors opened on their own under ?poster');
+  await page.screenshot({ path: path.join(SHOTS, 'launcher-desktop-closed.png') });
+  const t0 = Date.now();
+  const nav = page.waitForURL(/games\/the-raven\//, { timeout: 8000, waitUntil: 'commit' });
+  await page.click('.drawer[data-slug="the-raven"] .front');
+  const opened = await page.evaluate(() => document.getElementById('cabinet').classList.contains('open'));
+  if (!opened) problems.push('[desktop-shut] the click did not open the doors');
+  await nav;
+  const dt = Date.now() - t0;
+  console.log('  desktop-shut: one click through the shut doors navigated to', page.url(), `after ${dt}ms`);
+  if (dt < 450) problems.push(`[desktop-shut] navigated after ${dt}ms, before the doors had swung`);
+  await ctx.close();
+}
+
+// desktop: the doors open on the first pointer move, then hover a drawer, then click it
 {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage(); wire(page, 'desktop');
   await page.addInitScript(seed);
   await page.goto(base + '/index.html', { waitUntil: 'networkidle' });
   await page.mouse.move(600, 300);
-  await sleep(1800);
-  await page.screenshot({ path: path.join(SHOTS, 'launcher-desktop-closed.png') });
-  await page.mouse.click(700, 450);
   await sleep(1300);
+  if (!(await page.evaluate(() => window.__poe.open))) problems.push('[desktop] the doors did not open');
   await page.hover('.drawer[data-slug="masque-red-death"] .front');
   await page.mouse.move(560, 330);
   await sleep(700);
+  // the tag lies beside the drawer and must never cover another drawer's plate
+  const overlap = await page.evaluate(() => {
+    const tag = document.querySelector('.drawer[data-slug="masque-red-death"] .tag').getBoundingClientRect();
+    const hits = [];
+    for (const d of document.querySelectorAll('.drawer')) {
+      if (d.dataset.slug === 'masque-red-death') continue;
+      const p = d.querySelector('.plate').getBoundingClientRect();
+      if (tag.left < p.right && tag.right > p.left && tag.top < p.bottom && tag.bottom > p.top) hits.push(d.dataset.slug);
+    }
+    return hits;
+  });
+  if (overlap.length) problems.push('[desktop] hover tag covers the plate of: ' + overlap.join(', '));
   await page.screenshot({ path: path.join(SHOTS, 'launcher-desktop-hover.png') });
 
   // click the drawer: the pull-out transition must end in the game
