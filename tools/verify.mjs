@@ -134,72 +134,108 @@ function startServer(rootDir) {
  *
  * A page needs only one of the two to pass, because a canvas game legitimately
  * has almost no DOM and a DOM game legitimately has no canvas. */
-const NOT_BLANK_FN = `() => {
-  const out = { mode: null, canvas: null, dom: null, ok: false, why: '' };
+/* ---------- the not-blank assertion ----------------------------------------
+ * Two independent signals; the page passes if EITHER is satisfied.
+ *
+ * (1) PIXELS — the authoritative one. We take a real screenshot and count how
+ *     many pixels differ from the single most common colour. This is what the
+ *     player actually sees, so it works identically for 2D canvas, WebGL,
+ *     WebGPU, SVG and plain DOM.
+ *
+ *     Decoding the PNG is the interesting part. Writing a dependency-free PNG
+ *     decoder would mean implementing zlib inflate plus all five scanline
+ *     filters, and getting it wrong would produce silent false failures. So
+ *     instead we hand the PNG back to the browser — which obviously already
+ *     has a decoder — as a data URL, draw it to an offscreen canvas, and read
+ *     it with getImageData. No dependency, no hand-rolled codec.
+ *
+ *     Reading the game's own canvas in-page does NOT work and must not be used:
+ *     a WebGL context created without preserveDrawingBuffer (the default, and
+ *     what three.js does) returns an empty buffer once the frame is composited,
+ *     so a perfectly-rendered 3D scene reads back as 0% and fails. The
+ *     screenshot has no such problem.
+ *
+ *     Before the analysis shot we hide the shared chrome (.poe-back), so the
+ *     back link's own pixels can never disguise a genuinely blank game. The
+ *     screenshot saved for humans keeps it.
+ *
+ *     Thresholds: >=2% of pixels differing from the modal colour. Poe games are
+ *     deliberately dark, so a dimmer scene also passes when its content is
+ *     SPREAD OUT — >=0.8% differing across >=22% of a 16x10 grid of cells.
+ *     Raw percentage alone is not enough to tell one line of centred text from
+ *     a dim real scene (at DPR 3 a caption's antialiasing already reaches
+ *     ~0.5%), which is what the coverage term is for. Measured: a placeholder
+ *     tops out at 0.58% / 18.8% coverage; the sparsest real scene is
+ *     1.3% / 28%; a lit 3D scene is 24.6% / 36.9%.
+ *
+ * (2) DOM — >=8 elements with a non-zero on-screen box that carry visible
+ *     paint. A canvas game legitimately has almost no DOM and a DOM game
+ *     legitimately has no canvas, so either signal alone is enough.
+ *
+ * Special case: a landscape-only game showing .poe-rotate-hint in portrait is
+ * behaving correctly, and is not treated as blank.
+ */
 
-  // ---- (a) canvas ----
-  const canvases = [...document.querySelectorAll('canvas')]
-    .map(c => ({ c, r: c.getBoundingClientRect() }))
-    .filter(o => o.r.width > 40 && o.r.height > 40)
-    .sort((a, b) => (b.r.width * b.r.height) - (a.r.width * a.r.height));
+/* Runs in the page. Decodes a PNG data URL and reports its colour spread. */
+const ANALYSE_PNG = async (dataUrl) => {
+  const img = new Image();
+  img.src = dataUrl;
+  await img.decode();
+  const w = Math.min(img.naturalWidth, 900);
+  const h = Math.round(img.naturalHeight * (w / img.naturalWidth));
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const cx = cv.getContext('2d', { willReadFrequently: true });
+  cx.drawImage(img, 0, 0, w, h);
+  const data = cx.getImageData(0, 0, w, h).data;
 
-  if (canvases.length) {
-    const c = canvases[0].c;
-    let data = null, note = '';
-    const ctx2d = (() => { try { return c.getContext('2d'); } catch { return null; } })();
-    if (ctx2d && typeof ctx2d.getImageData === 'function') {
-      try { data = ctx2d.getImageData(0, 0, c.width, c.height).data; } catch (e) { note = '2d read blocked: ' + e.message; }
-    }
-    if (!data) {
-      // WebGL / WebGPU path: snapshot through an offscreen 2d canvas. This works
-      // whenever the drawing buffer is still valid (preserveDrawingBuffer, or
-      // immediately after a draw within the same frame).
-      try {
-        const t = document.createElement('canvas');
-        const w = t.width = Math.min(c.width || 1, 512);
-        const h = t.height = Math.min(c.height || 1, 512);
-        const tx = t.getContext('2d', { willReadFrequently: true });
-        tx.drawImage(c, 0, 0, w, h);
-        data = tx.getImageData(0, 0, w, h).data;
-        note = note || 'sampled via drawImage';
-      } catch (e) { note = note + ' | drawImage failed: ' + e.message; }
-    }
-    if (data) {
-      const counts = new Map();
-      const px = data.length / 4;
-      const stride = Math.max(1, Math.floor(px / 20000)); // cap at ~20k samples
-      let sampled = 0;
-      for (let i = 0; i < px; i += stride) {
-        const o = i * 4;
-        // quantise to 4 bits/channel so film grain / dithering is not counted as signal
-        const k = ((data[o] >> 4) << 8) | ((data[o+1] >> 4) << 4) | (data[o+2] >> 4);
-        counts.set(k, (counts.get(k) || 0) + 1);
-        sampled++;
-      }
-      let top = 0;
-      for (const v of counts.values()) if (v > top) top = v;
-      const diffRatio = sampled ? (sampled - top) / sampled : 0;
-      out.mode = 'canvas';
-      out.canvas = {
-        w: c.width, h: c.height, cssW: Math.round(canvases[0].r.width), cssH: Math.round(canvases[0].r.height),
-        sampled, distinctColors: counts.size, differingPct: +(diffRatio * 100).toFixed(2), note,
-      };
-      // PRIMARY RULE: >=2% of sampled pixels differ from the single most common
-      // colour. An all-black / all-white / never-drawn canvas scores ~0%.
-      // SECONDARY RULE: Poe games are deliberately dark, and a moody scene can
-      // legitimately sit under 2% while still being a real render. So also pass
-      // a canvas that shows genuine tonal variety (>=16 distinct quantised
-      // colours) with a non-trivial amount of non-modal pixels. A blank canvas
-      // fails both: it has 1-2 colours and ~0% non-modal pixels.
-      if (diffRatio >= 0.02) {
-        out.ok = true; out.why = 'canvas has ' + out.canvas.differingPct + '% non-modal pixels';
-      } else if (counts.size >= 16 && diffRatio >= 0.0035) {
-        out.ok = true; out.why = 'canvas has ' + counts.size + ' distinct colours and ' + out.canvas.differingPct + '% non-modal pixels';
-      }
+  const counts = new Map();
+  const px = data.length / 4;
+  const stride = Math.max(1, Math.floor(px / 40000));
+  let sampled = 0;
+  for (let i = 0; i < px; i += stride) {
+    const o = i * 4;
+    // quantise to 4 bits per channel so film grain and dithering do not read as signal
+    const k = ((data[o] >> 4) << 8) | ((data[o + 1] >> 4) << 4) | (data[o + 2] >> 4);
+    counts.set(k, (counts.get(k) || 0) + 1);
+    sampled++;
+  }
+  let top = 0, modal = 0;
+  for (const [k, v] of counts) if (v > top) { top = v; modal = k; }
+
+  /* Spatial coverage. Raw "% of pixels differing" cannot tell one line of
+   * centred text (a placeholder) from a dim but real scene: at DPR 3 the
+   * antialiased edges of a single sentence already reach ~0.5%. So also ask
+   * WHERE the non-modal pixels are. Split the image into a 16x10 grid and
+   * count the cells in which at least 1.5% of pixels differ from the global
+   * modal colour. A caption lights up a handful of cells; an actual game
+   * paints most of the screen. */
+  const GX = 16, GY = 10;
+  const cells = new Array(GX * GY).fill(0);
+  const cellPx = new Array(GX * GY).fill(0);
+  for (let y = 0; y < h; y++) {
+    const gy = Math.min(GY - 1, Math.floor((y / h) * GY));
+    for (let x = 0; x < w; x++) {
+      const o = (y * w + x) * 4;
+      const k = ((data[o] >> 4) << 8) | ((data[o + 1] >> 4) << 4) | (data[o + 2] >> 4);
+      const idx = gy * GX + Math.min(GX - 1, Math.floor((x / w) * GX));
+      cellPx[idx]++;
+      if (k !== modal) cells[idx]++;
     }
   }
+  let live = 0;
+  for (let i = 0; i < cells.length; i++) if (cellPx[i] && cells[i] / cellPx[i] >= 0.015) live++;
 
-  // ---- (b) DOM / SVG ----
+  return {
+    w, h, sampled,
+    distinctColors: counts.size,
+    differingPct: +(sampled ? ((sampled - top) / sampled) * 100 : 0).toFixed(2),
+    coveragePct: +((live / (GX * GY)) * 100).toFixed(1),
+  };
+};
+
+/* Runs in the page. Counts DOM elements that actually paint something. */
+const DOM_PAINT_FN = `() => {
   let painted = 0;
   const els = document.body ? document.body.querySelectorAll('*') : [];
   for (const el of els) {
@@ -209,7 +245,7 @@ const NOT_BLANK_FN = `() => {
     const s = getComputedStyle(el);
     if (s.visibility === 'hidden' || s.display === 'none' || parseFloat(s.opacity) === 0) continue;
     const tag = el.tagName.toLowerCase();
-    const structural = tag === 'html' || tag === 'body' || tag === 'main' || tag === 'div' || tag === 'section';
+    const structural = ['html','body','main','div','section'].includes(tag);
     const hasPaint =
       ['svg','path','circle','rect','line','polygon','text','img','video','canvas','button','a','input'].includes(tag) ||
       (s.backgroundImage && s.backgroundImage !== 'none') ||
@@ -218,15 +254,13 @@ const NOT_BLANK_FN = `() => {
       (el.childElementCount === 0 && (el.textContent || '').trim().length > 0);
     if (hasPaint) painted++;
   }
-  out.dom = { paintedElements: painted };
-  if (!out.ok && painted >= 8) { out.mode = out.mode || 'dom'; out.ok = true; out.why = painted + ' painted DOM elements'; }
-
-  if (!out.ok) {
-    out.why = out.mode === 'canvas'
-      ? 'canvas is effectively flat (' + (out.canvas ? out.canvas.differingPct : '?') + '% non-modal pixels) and only ' + painted + ' painted DOM elements'
-      : 'no usable canvas and only ' + painted + ' painted DOM elements';
-  }
-  return out;
+  const hint = document.querySelector('.poe-rotate-hint');
+  const rotateGate = !!(hint && getComputedStyle(hint).display !== 'none' && hint.getBoundingClientRect().width > 0);
+  const canvases = [...document.querySelectorAll('canvas')].map(c => {
+    const r = c.getBoundingClientRect();
+    return { w: c.width, h: c.height, cssW: Math.round(r.width), cssH: Math.round(r.height) };
+  });
+  return { painted, rotateGate, canvases };
 }`;
 
 /* ---------- page discovery -------------------------------------------------- */
@@ -259,6 +293,15 @@ const VIEWPORTS = [
   { tag: 'desktop', opts: { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 } },
   { tag: 'mobile',  opts: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true } },
 ];
+
+/* A landscape-only game covers the screen with .poe-rotate-hint in portrait.
+ * Passing it on the strength of the hint alone would mean never checking the
+ * game itself on mobile at all, so we re-run it rotated — which is what the
+ * player actually sees. */
+const MOBILE_LANDSCAPE = {
+  tag: 'mobile',
+  opts: { viewport: { width: 844, height: 390 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+};
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -303,7 +346,7 @@ async function checkOne(browser, base, page_, vp) {
 
     // NOTE: Playwright evaluates a STRING as an expression, so the arrow-function
     // source must be wrapped in an immediately-invoked call to actually run it.
-    blank = await page.evaluate(`(${NOT_BLANK_FN})()`);
+    blank = { dom: await page.evaluate(`(${DOM_PAINT_FN})()`) };
 
     /* Without <meta name="viewport" content="width=device-width, ...">, Chromium
      * lays a mobile page out at the legacy 980px width and scales it down: the
@@ -326,6 +369,43 @@ async function checkOne(browser, base, page_, vp) {
   await fsp.mkdir(SHOTS, { recursive: true });
   const shot = path.join(SHOTS, `${page_.name}-${vp.tag}.png`);
   try { await page.screenshot({ path: shot }); } catch (e) { problems.push(`screenshot: ${e.message}`); }
+
+  if (blank) {
+    try {
+      // Analysis shot with the shared chrome hidden, so .poe-back cannot mask
+      // a blank game. Restored immediately afterwards.
+      await page.evaluate(() => {
+        for (const el of document.querySelectorAll('.poe-back')) el.style.visibility = 'hidden';
+      });
+      const buf = await page.screenshot({ type: 'png' });
+      await page.evaluate(() => {
+        for (const el of document.querySelectorAll('.poe-back')) el.style.visibility = '';
+      });
+      blank.pixels = await page.evaluate(ANALYSE_PNG, 'data:image/png;base64,' + buf.toString('base64'));
+    } catch (e) {
+      problems.push(`pixel analysis failed: ${e.message}`.slice(0, 300));
+    }
+
+    const px = blank.pixels;
+    const dom = blank.dom || { painted: 0, rotateGate: false };
+    if (dom.rotateGate) {
+      blank.ok = true; blank.why = 'showing .poe-rotate-hint (landscape-only game in portrait)';
+    } else if (px && px.differingPct >= 2) {
+      // PRIMARY: plenty of the screen is not the background colour.
+      blank.ok = true; blank.why = `${px.differingPct}% of pixels differ from the modal colour`;
+    } else if (px && px.differingPct >= 0.8 && px.coveragePct >= 22) {
+      // SECONDARY: dim, but the content is spread across the screen rather than
+      // being one caption. Calibrated against real pages: a placeholder tops out
+      // at 0.58% / 18.8% coverage, the sparsest real scene measures 1.3% / 28%.
+      blank.ok = true; blank.why = `${px.differingPct}% differing spread over ${px.coveragePct}% of the screen`;
+    } else if (dom.painted >= 8) {
+      blank.ok = true; blank.why = `${dom.painted} painted DOM elements`;
+    } else {
+      blank.why = px
+        ? `only ${px.differingPct}% of pixels differ from the modal colour, spread over just ${px.coveragePct}% of the screen, and only ${dom.painted} painted DOM elements`
+        : `no pixel analysis and only ${dom.painted} painted DOM elements`;
+    }
+  }
 
   if (!blank) problems.push('not-blank check did not run (page never became evaluable)');
   else if (!blank.ok) problems.push(`BLANK: ${blank.why}`);
@@ -355,16 +435,23 @@ let failures = 0;
 for (const p of pages) {
   for (const vp of VIEWPORTS) {
     process.stdout.write(`  … ${p.name} @ ${vp.tag}`.padEnd(46));
-    const r = await checkOne(browser, base, p, vp);
+    let r = await checkOne(browser, base, p, vp);
+    let note = '';
+    if (vp.tag === 'mobile' && r.blank && r.blank.dom && r.blank.dom.rotateGate) {
+      r = await checkOne(browser, base, p, MOBILE_LANDSCAPE);
+      note = ' (landscape)';
+    }
     const pass = r.problems.length === 0;
     if (!pass) failures++;
     const detail = r.blank
-      ? (r.blank.mode === 'canvas' && r.blank.canvas
-          ? `canvas ${r.blank.canvas.w}x${r.blank.canvas.h}, ${r.blank.canvas.differingPct}% non-modal, ${r.blank.canvas.distinctColors} colours, ${r.blank.dom.paintedElements} dom`
-          : `${r.blank.dom.paintedElements} painted dom elements`)
+      ? [
+          r.blank.pixels ? `${r.blank.pixels.differingPct}% px, ${r.blank.pixels.coveragePct}% cover` : 'no pixels',
+          `${r.blank.dom.painted} dom`,
+          r.blank.dom.canvases.length ? `canvas ${r.blank.dom.canvases[0].w}x${r.blank.dom.canvases[0].h}` : 'no canvas',
+        ].join(', ')
       : '—';
-    console.log(pass ? 'PASS' : `FAIL (${r.problems.length})`);
-    rows.push({ page: p.name, vp: vp.tag, pass, detail, problems: r.problems, shot: r.shot });
+    console.log((pass ? 'PASS' : `FAIL (${r.problems.length})`) + note);
+    rows.push({ page: p.name, vp: vp.tag + note, pass, detail, problems: r.problems, shot: r.shot });
   }
 }
 
@@ -372,7 +459,7 @@ await browser.close();
 srv.close();
 
 /* summary table */
-const W = { page: Math.max(6, ...rows.map((r) => r.page.length)), vp: 7 };
+const W = { page: Math.max(6, ...rows.map((r) => r.page.length)), vp: Math.max(7, ...rows.map((r) => r.vp.length)) };
 console.log('\n  ' + '─'.repeat(W.page + W.vp + 60));
 console.log('  ' + 'PAGE'.padEnd(W.page) + '  ' + 'VIEW'.padEnd(W.vp) + '  ' + 'RESULT'.padEnd(8) + '  DETAIL');
 console.log('  ' + '─'.repeat(W.page + W.vp + 60));

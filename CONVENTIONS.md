@@ -41,16 +41,39 @@ cdnjs all fail with `ERR_TUNNEL_CONNECTION_FAILED`. Do not write a
 
 Everything is served from `/vendor/`:
 
-```js
-// three.js r160 — ES module
-import * as THREE from '/vendor/three/three.module.js';
-// three addons (controls, postprocessing, loaders, shaders, lines, geometries,
-// math, utils, objects, misc, effects, helpers, modifiers, animation, …)
-import { OrbitControls } from '/vendor/three/jsm/controls/OrbitControls.js';
-```
+### three.js r160 — you MUST add the import map
+
+Every file under `examples/jsm` does `import ... from 'three'`. That bare
+specifier does not resolve on its own, so **without this import map your game
+dies with `Failed to resolve module specifier "three"`.** Paste it before your
+module script:
 
 ```html
-<!-- matter-js 0.19 — UMD, defines the global `Matter` -->
+<script type="importmap">
+{ "imports": {
+    "three": "/vendor/three/three.module.js",
+    "three/addons/": "/vendor/three/jsm/"
+} }
+</script>
+<script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls }  from 'three/addons/controls/OrbitControls.js';
+  import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+</script>
+```
+
+Vendored addon folders: `controls`, `postprocessing`, `shaders`, `loaders`,
+`geometries`, `lines`, `math`, `utils`, `objects`, `misc`, `effects`, `helpers`,
+`modifiers`, `animation`, `curves`, `lights`, `csm`, `interactive`, `materials`,
+`textures`, `cameras`, `environments`, `capabilities`, and a trimmed `libs`
+(`fflate`, `potpack`, `stats`, `ktx-parse`, `zstddec`). `nodes/`, `renderers/`,
+`webxr/`, `exporters/` and the heavy `libs` decoders were dropped to keep the
+repo small — ask if you need one back.
+
+### matter-js 0.19 — UMD, no import map needed
+
+```html
+<!-- defines the global `Matter` -->
 <script src="/vendor/matter/matter.min.js"></script>
 ```
 
@@ -93,7 +116,9 @@ type, buttons, title screen, motion. Do not add shared styling; do not make your
 game look like your neighbour's.
 
 Need landscape? Add `<div class="poe-rotate-hint">Turn your device</div>`. It
-shows itself only in portrait under 700px.
+shows itself only in portrait under 700px. `verify.mjs` notices the hint and
+re-runs your mobile check rotated at 844x390, so the game itself still gets
+verified — the hint is not a way to skip mobile.
 
 ## 6. `shared/poe.js` — the whole API
 
@@ -125,17 +150,24 @@ Enter and Space (so a title screen advances), waits again, then fails on:
 
 - any `console.error`, uncaught page error, or 4xx/5xx request;
 - a missing / wrong `viewport` meta;
-- a **blank** page — for a canvas it samples pixels and needs ≥2% to differ
-  from the most common colour (or ≥16 distinct colours with ≥0.35% differing,
-  so a legitimately dark scene is not failed); for DOM/SVG it needs ≥8 painted
-  elements.
+- a **blank** page. It screenshots the page (with `.poe-back` hidden so the
+  back link cannot disguise an empty game), decodes it in-browser, and needs
+  **≥2% of pixels to differ from the most common colour**. Poe games are dark,
+  so a dimmer scene also passes if its content is *spread out*: ≥0.8%
+  differing across ≥22% of a 16x10 grid. A page with ≥8 painted DOM elements
+  passes too. For scale — placeholder: 0.2–0.6% / 4–19% coverage; a sparse 2D
+  scene: 1.3% / 28%; a lit 3D scene: 25% / 37%. If you are anywhere near the
+  line, your game is probably too dark to see.
 
 Screenshots land in `screenshots/<slug>-desktop.png` and `-mobile.png` — look
 at them. Exit code is non-zero on any failure.
 
-**Working reference:** `tools/selftest/index.html` uses every piece of the
-shared plumbing and always passes. Run `node tools/verify.mjs tools/selftest`
-and crib from it.
+**Working references — crib from these, they always pass:**
+
+```sh
+node tools/verify.mjs tools/selftest    # 2D canvas + every shared/poe.js export
+node tools/verify.mjs tools/threetest   # three.js + addons + matter-js wiring
+```
 
 ## 8. Gotchas that will actually bite you
 
