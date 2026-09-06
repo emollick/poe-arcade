@@ -11,7 +11,8 @@
  *
  *   index.html  netlify.toml  favicon.svg (if present)
  *   launcher/  shared/  vendor/
- *   games/**   minus every playtest.mjs, NOTES.md and games/<slug>/rust/
+ *   games/**   minus every playtest.mjs, NOTES.md, the headless tuning bots
+ *              (bot.mjs, bots.mjs, *.test.mjs) and games/<slug>/rust/
  *              (games/black-cat/sim.wasm, the compiled artifact, IS included)
  *
  * Left out: .git, tools/, screenshots/, README.md, CONVENTIONS.md, node_modules,
@@ -32,7 +33,7 @@ const OUT = path.resolve(process.argv[2] || path.join(ROOT, '..', 'poe-arcade-ne
 
 const ROOT_FILES = ['index.html', 'netlify.toml', 'favicon.svg'];
 const ROOT_DIRS = ['launcher', 'shared', 'vendor', 'games'];
-const SKIP_FILES = new Set(['playtest.mjs', 'NOTES.md', '.DS_Store', 'Thumbs.db', '.gitkeep', '.gitignore']);
+const SKIP_FILES = new Set(['playtest.mjs', 'bot.mjs', 'bots.mjs', 'NOTES.md', '.DS_Store', 'Thumbs.db', '.gitkeep', '.gitignore']);
 const SKIP_DIRS = new Set(['node_modules', '.git', 'target', '.cache', '.netlify']);
 
 function skipDir(rel, name) {
@@ -42,7 +43,7 @@ function skipDir(rel, name) {
 }
 
 function skipFile(name) {
-  return SKIP_FILES.has(name) || /\.log$/.test(name);
+  return SKIP_FILES.has(name) || /\.log$/.test(name) || /\.test\.mjs$/.test(name);
 }
 
 function walk(relDir, out) {

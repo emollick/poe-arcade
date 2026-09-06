@@ -6,9 +6,9 @@ Thumbs.db
 npm-debug.log*
 .netlify/
 .cache/
-# Rust build output, if a game ever needs a wasm module.
-# The COMPILED .wasm must still be committed under /wasm/ — the deploy has no
-# build step — but the 200MB target/ directory must not be.
+# Rust build output (games/black-cat/rust). The COMPILED module is committed
+# beside the game as games/black-cat/sim.wasm — the deploy has no build step —
+# but the 200MB target/ directory must not be.
 target/
 **/target/
 
