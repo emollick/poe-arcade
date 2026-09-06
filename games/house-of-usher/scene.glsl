@@ -10,7 +10,11 @@ uniform vec2  uRes;
 uniform float uTime;
 uniform vec3  uCamPos, uCamFwd, uCamRight, uCamUp;
 uniform float uFocal;
+uniform float uShift;      // vertical lens shift (ndc): frames house + reflection on short aspects
 uniform float uCrack;      // 0..1 progress of the fissure toward the tarn
+uniform float uSeal;       // win: the fissure seals bone-white
+uniform float uClear;      // win: the storm clears to a cold moon
+uniform float uWinLit;     // win: the windows light one by one
 uniform float uTipY;       // world y of the fissure tip
 uniform float uDepth;      // how deep (z) the cut goes
 uniform float uFlash;      // lightning light intensity
@@ -237,12 +241,18 @@ vec3 sky(vec3 rd){
   vec2 cuv = rd.xz / (max(el, -0.1) + 0.28);
   float cl = fbm(cuv * 0.75 + vec2(uTime*0.018, uTime*0.011));
   float cl2 = fbm(cuv * 1.9 - vec2(uTime*0.03, 0.0));
-  cl = smoothstep(0.32, 0.78, cl + 0.25*cl2 - 0.1);
+  cl = smoothstep(0.32 + 0.30*uClear, 0.78 + 0.12*uClear, cl + 0.25*cl2 - 0.1);   // the storm thins as it clears
   vec3 cloudCol = mix(vec3(0.04, 0.045, 0.06), vec3(0.25, 0.26, 0.30), cl);
   vec3 col = mix(base, cloudCol, smoothstep(-0.03, 0.22, el) * 0.9);
   // moon glow behind the cloud (cold)
   float md = max(dot(rd, MOONDIR), 0.0);
   col += vec3(0.22, 0.27, 0.36) * pow(md, 30.0) * 0.55 * (1.0 - 0.6*cl);
+  // the storm clears: a cold moon breaks through over the house
+  if (uClear > 0.0) {
+    float disc = smoothstep(0.9978, 0.9988, md);
+    col += (vec3(0.92, 0.94, 1.0) * disc * 1.8 + vec3(0.30, 0.36, 0.50) * pow(md, 90.0) * 1.2) * uClear * (1.0 - 0.7*cl);
+    col += vec3(0.05, 0.07, 0.12) * uClear * smoothstep(-0.05, 0.4, el);
+  }
   // blood-red moon
   if (uMoon > 0.0) {
     float disc = smoothstep(0.9974, 0.9986, md);
@@ -283,8 +293,9 @@ Mat material(vec3 pw, vec3 n){
   float house = sdHouseRaw(p);
   float stoneN = 0.5*noise2(p.xy*5.0) + 0.5*noise2(p.zy*5.0 + 3.0);
   if (house > 0.08) {
-    // bank
-    m.alb = vec3(0.075, 0.08, 0.07) * (0.7 + 0.6*noise2(p.xz*4.0));
+    // bank: wet slate
+    m.alb = vec3(0.06, 0.065, 0.075) * (0.7 + 0.6*noise2(p.xz*4.0));
+    m.rough = 0.5;
     return m;
   }
   // inside a window recess?
@@ -297,17 +308,25 @@ Mat material(vec3 pw, vec3 n){
     m.alb = vec3(0.03, 0.02, 0.02);
     float pulse = 0.8 + 0.35*sin(uTime*6.0 + p.y*7.0);
     m.emis = mix(vec3(0.35, 0.02, 0.01), vec3(1.0, 0.10, 0.04), deep) * (1.3 + 2.5*uJolt) * pulse * (0.35 + 0.65*uCrack + 0.3);
+    // the house held: the wound knits bone-white, brightest where it is closing
+    if (uSeal > 0.0) m.emis = mix(m.emis, vec3(1.0, 0.95, 0.82) * (1.6 + 2.2*exp(-abs(p.y - uTipY)*2.0)), uSeal);
     return m;
   }
   if (inWin) {
     float cx = clamp(floor(p.x) + 0.5, -1.5, 1.5);
-    float cy = floor((p.y - (G+1.25)) / 1.15 + 0.5);
-    float h = hash21(vec2(cx, cy) + vec2(sign(p.x)*7.0*step(2.5, abs(p.x)), 0.0));
+    float rowf = clamp(floor((p.y - (G+1.25)) / 1.15 + 0.5), 0.0, 2.0);
+    float cy = G + 1.25 + 1.15*rowf;
+    float h = hash21(vec2(cx, rowf) + vec2(sign(p.x)*7.0*step(2.5, abs(p.x)), 0.0));
     m.alb = vec3(0.02, 0.02, 0.025);
-    bool lit = h > 0.80 && abs(p.x) < 2.0 && p.y > G + 0.9;
+    bool main = abs(p.x) < 2.0 && p.y > G + 0.9;
+    // a few rooms keep a candle all night; when the house holds, the rest light one by one
+    bool lit = main && (h > 0.80 || h / 0.8 < uWinLit);
     if (lit) {
-      float flick = 0.75 + 0.25*noise1(uTime*3.0 + h*40.0);
-      m.emis = vec3(0.42, 0.40, 0.18) * 0.2 * flick;
+      vec2 l = vec2(p.x - cx, p.y - cy);
+      float flick = 0.72 + 0.20*noise1(uTime*3.0 + h*40.0) + 0.08*noise1(uTime*11.0 + h*9.0);
+      float glow = exp(-length(l * vec2(3.0, 2.2)) * 1.4) * 0.85 + 0.15;      // the candle sits low and centred
+      float mull = step(0.022, abs(l.x)) * step(0.022, abs(l.y - 0.06));       // the sash bars
+      m.emis = vec3(1.0, 0.62, 0.26) * 1.2 * flick * glow * mull;
     }
     return m;
   }
@@ -345,13 +364,17 @@ vec3 shade(vec3 p, vec3 n, vec3 rd, float t, bool cheap){
   }
   // the blood moon behind
   if (uMoon > 0.0) col += m.alb * vec3(1.0, 0.16, 0.08) * 1.4 * uMoon * max(dot(n, MOONDIR), 0.0);
+  // the storm clears: cold moonlight settles on the stone
+  if (uClear > 0.0) col += m.alb * vec3(0.55, 0.62, 0.80) * 0.9 * uClear * (dk * sh + 0.25 * ao);
   // the sickly exhalation from the tarn about the base
   vec3 pl = toLocal(p);
   float base = exp(-max(pl.y - G, 0.0) * 1.25);
   col += m.alb * vec3(0.40, 0.50, 0.26) * 0.30 * base * (0.55 + 0.45*max(-n.y, 0.0) + 0.3) * ao;
   // red light spilling from the fissure
   float cd = crack2D(pl.xy, uTipY);
-  col += vec3(1.0, 0.12, 0.05) * exp(-cd * 7.0) * (0.25 + 0.9*uCrack + 1.5*uJolt) * 0.5 * (0.4 + 0.6*m.alb.b*2.0);
+  // (the seal's bone glow fades to a faint scar once the wound has closed to the top)
+  vec3 spill = mix(vec3(1.0, 0.12, 0.05) * (0.25 + 0.9*uCrack + 1.5*uJolt), vec3(1.0, 0.95, 0.82) * (0.5 - 0.3*smoothstep(6.0, 6.35, uTipY)), uSeal);
+  col += spill * exp(-cd * 7.0) * 0.5 * (0.4 + 0.6*m.alb.b*2.0);
   // the lit brace
   if (uMarkI > 0.0) {
     vec3 L = uMark - p; float dl = length(L); L /= dl;
@@ -368,7 +391,7 @@ vec3 shade(vec3 p, vec3 n, vec3 rd, float t, bool cheap){
 void main(){
   vec2 uv = (gl_FragCoord.xy * 2.0 - uRes) / uRes.y;
   vec3 ro = uCamPos;
-  vec3 rd = normalize(uCamRight * uv.x + uCamUp * uv.y + uCamFwd * uFocal);
+  vec3 rd = normalize(uCamRight * uv.x + uCamUp * (uv.y - uShift) + uCamFwd * uFocal);
 
   vec3 fogCol = vec3(0.10, 0.11, 0.135) + uFlash * vec3(0.22, 0.23, 0.26) + uMoon * vec3(0.12, 0.02, 0.01);
   float fogK = 0.019 + uMist * 0.06;

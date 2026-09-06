@@ -15,6 +15,19 @@ const reduced = prefersReducedMotion();
 const BEST_KEY = 'house-of-usher:best';
 const RUN_LENGTH = 70;            // seconds until the narrator is clear
 const G = 0.5, FZ = -1.4;
+/* The fissure is the clock. Its tip runs down the facade all night (the floor
+ * under it reaches 0.55 at the causeway); every brace you hit recoils it one
+ * segment, every one you miss lets it run through. */
+const CRACK_TOP = 6.35, CRACK_SPAN = 6.55;                 // tipY = CRACK_TOP - CRACK_SPAN * crack (mirrors scene.glsl)
+const CRACK_FLOOR = 0.55;                                  // where the tip sits at t = RUN_LENGTH under perfect play
+const CREEP_PER_BRACE = 0.074;                             // crack the tip gains between two braces (vs RECOIL per hit)
+const RECOIL = 0.08, COST_EXPIRE = 0.05, COST_WRONG = 0.045, COST_DARK = 0.03;
+const FORK_AT = 38;                                        // after this the storm forks the fissure
+// the zigzag of crack2D() in scene.glsl; the six braces sit on its vertices, top to bottom
+const CRACK_PATH = [[0.05, 6.35], [0.30, 5.30], [-0.20, 4.40], [0.33, 3.55], [-0.14, 2.70], [0.30, 1.90], [-0.06, 1.15], [0.24, 0.55], [0.10, -0.30]];
+const tipOf = (crack) => CRACK_TOP - CRACK_SPAN * crack;
+const crackAt = (y) => Math.min(1, Math.max(0, (CRACK_TOP - y) / CRACK_SPAN));
+const braceInterval = (t) => lerp(1.7, 0.72, smooth(0, 60, t));
 
 /* ---------- WebGL ---------- */
 const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, powerPreference: 'high-performance' });
@@ -77,21 +90,35 @@ fitCanvas(canvas, ({ width, height, dpr }) => { W = width; H = height; DPR = Mat
 canvas.addEventListener('webglcontextlost', (e) => e.preventDefault());
 
 /* ---------- camera ---------- */
-const cam = { pos: [0, 1.7, -13], fwd: [0, 0, 1], right: [1, 0, 0], up: [0, 1, 0], focal: 1.6 };
-function setCamera(pos, target, dist) {
+const cam = { pos: [0, 1.7, -13], fwd: [0, 0, 1], right: [1, 0, 0], up: [0, 1, 0], focal: 1.6, shift: 0 };
+const FRAME_TOP = [1.55, 7.9, -1.4];                 // the tower cap
+const FRAME_BOTTOM = [0.30, -CRACK_PATH[1][1], -1.57]; // the deepest reflected brace
+function setCamera(pos, target, dist, fitReflection) {
   const f = norm(sub(target, pos));
   const r = norm(cross([0, 1, 0], f));
   const u = cross(f, r);
   cam.pos = pos; cam.fwd = f; cam.right = r; cam.up = u;
   const aspect = W / H;
   // fit the house (+/-5.2 wide) and house-over-reflection (+/-8 tall) at this distance
-  cam.focal = Math.min(dist / 8.2, aspect * dist / 4.9);
+  let focal = Math.min(dist / 8.2, aspect * dist / 4.9), shift = 0;
+  if (fitReflection) {
+    // in play the deepest reflected brace must stay tappable on every aspect: shrink the
+    // focal until tower cap and reflected brace both fit, then lens-shift the frame up
+    const ndc = (p) => { const d = sub(p, cam.pos); return dot(d, cam.up) / dot(d, cam.fwd); };
+    const top = ndc(FRAME_TOP), bot = ndc(FRAME_BOTTOM);
+    const margin = 48 / (H / 2);
+    const avail = 2 - 2 * margin;
+    if ((top - bot) * focal > avail) focal = avail / (top - bot);
+    const low = bot * focal, high = top * focal;
+    if (low < -1 + margin) shift = Math.min((-1 + margin) - low, (1 - margin) - high);
+  }
+  cam.focal = focal; cam.shift = shift;
 }
 function project(p) {
   const d = sub(p, cam.pos);
   const z = dot(d, cam.fwd); if (z <= 0.05) return null;
   const x = dot(d, cam.right) / z * cam.focal / (W / H);
-  const y = dot(d, cam.up) / z * cam.focal;
+  const y = dot(d, cam.up) / z * cam.focal + cam.shift;
   return [(x * 0.5 + 0.5) * W, (1 - (y * 0.5 + 0.5)) * H];
 }
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -104,23 +131,17 @@ const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t
 const rand = (a, b) => a + Math.random() * (b - a);
 
 /* ---------- the bracing marks ---------- */
-const MARK_POS = [
-  [-3.1, G + 1.35, -1.12],   // 1 left wing
-  [-1.35, G + 3.3, FZ - 0.07], // 2 main, upper left
-  [-0.62, G + 4.55, -1.57],  // 3 gable
-  [1.55, G + 5.95, FZ - 0.07], // 4 tower
-  [1.15, G + 1.7, FZ - 0.07],  // 5 main, lower right
-  [3.1, G + 1.35, -1.12],    // 6 right wing
-];
+// six braces on the fissure's own path: gable, upper wall, second floor, first floor, ground floor, door
+const MARK_POS = [1, 2, 3, 4, 5, 6].map((k) => [CRACK_PATH[k][0], CRACK_PATH[k][1], k === 1 ? -1.57 : FZ - 0.07]);
 const marks = [];
 for (let k = 0; k < 12; k++) {
   const i = k % 6, refl = k >= 6;
   const el = document.createElement('div');
   el.className = 'mark' + (refl ? ' refl' : '');
-  el.innerHTML = `<svg viewBox="0 0 60 60"><circle class="halo" cx="30" cy="30" r="29"/><circle class="ring-bg" cx="30" cy="30" r="24"/><circle class="ring" cx="30" cy="30" r="24"/><circle class="core" cx="30" cy="30" r="2.2"/></svg><span class="num">${i + 1}</span>`;
+  el.innerHTML = `<div class="rw"><svg viewBox="0 0 60 60"><circle class="halo" cx="30" cy="30" r="29"/><circle class="ring2" cx="30" cy="30" r="24"/><circle class="ring-bg" cx="30" cy="30" r="24"/><circle class="ring" cx="30" cy="30" r="24"/><circle class="core" cx="30" cy="30" r="2.2"/></svg></div><span class="num">${i + 1}</span>`;
   stage.appendChild(el);
   const ring = el.querySelector('.ring');
-  marks.push({ i, refl, el, ring, sx: 0, sy: 0, active: null, world: refl ? [MARK_POS[i][0], -MARK_POS[i][1], MARK_POS[i][2]] : MARK_POS[i] });
+  marks.push({ i, refl, el, ring, sx: 0, sy: 0, off: false, active: null, world: refl ? [MARK_POS[i][0], -MARK_POS[i][1], MARK_POS[i][2]] : MARK_POS[i] });
 }
 const numsVisible = !touch;
 for (const m of marks) m.el.querySelector('.num').style.display = numsVisible ? '' : 'none';
@@ -129,14 +150,15 @@ for (const m of marks) m.el.querySelector('.num').style.display = numsVisible ? 
 const S = {
   mode: 'title',      // title | play | win | lose
   t: 0,               // run clock (s)
-  crack: 0, slowUntil: 0, jolt: 0,
+  crack: 0, jolt: 0,
   score: 0, streak: 0, bestStreak: 0, hits: 0, misses: 0,
-  nextSpawn: 0, spawnDelayed: 0, lastIdx: -1,
+  nextSpawn: 0, forkNext: false, lastIdx: -1, runTo: -1,
   shake: 0, shakeX: 0, shakeY: 0,
   endT: 0, endShown: false,
   flash: 0, flashHold: 0, bolt: 0, boltAz: 0.14, boltSeed: 3.7, flashDir: norm([0.2, 0.7, 0.35]), nextFlash: 1.2, thunderAt: -1,
-  moon: 0, lean: 0, sink: 0, rings: 0, mist: 0, markI: 0, markPos: [0, 0, 0], fade: 0,
-  muted: false, time: 0, lastCreak: 0, hintT: 0,
+  moon: 0, lean: 0, sink: 0, rings: 0, mist: 0, markI: 0, markPos: [0, 0, 0], pulseT: -9, pulsePos: [0, 0, 0], fade: 0,
+  seal: 0, clear: 0, winLit: 0, crack0: 0,
+  muted: false, time: 0, lastCreak: 0, hintT: 0, hint2: false, reflHinted: false, forkHinted: false, pushed: false,
 };
 let best = loadState(BEST_KEY, null);
 function showBest() {
@@ -247,8 +269,9 @@ function strike(intensity = 1) {
 
 /* ---------- run control ---------- */
 function resetRun() {
-  Object.assign(S, { t: 0, crack: 0, slowUntil: 0, jolt: 0, score: 0, streak: 0, bestStreak: 0, hits: 0, misses: 0, nextSpawn: 1.1, spawnDelayed: 0,
-    lastIdx: -1, shake: 0, endT: 0, endShown: false, moon: 0, lean: 0, sink: 0, rings: 0, mist: 0, markI: 0, fade: 0, hintT: 0, newBest: false });
+  Object.assign(S, { t: 0, crack: 0, jolt: 0, score: 0, streak: 0, bestStreak: 0, hits: 0, misses: 0, nextSpawn: 1.1, forkNext: false,
+    lastIdx: -1, runTo: -1, shake: 0, endT: 0, endShown: false, moon: 0, lean: 0, sink: 0, rings: 0, mist: 0, markI: 0, pulseT: -9, fade: 0, hintT: 0, newBest: false,
+    seal: 0, clear: 0, winLit: 0, crack0: 0, hint2: false, reflHinted: false, forkHinted: false });
   for (const m of marks) { m.active = null; m.el.className = 'mark' + (m.refl ? ' refl' : ''); }
   updateHud(true);
 }
@@ -274,6 +297,7 @@ function endRun(won) {
   const record = { score: S.score, time: S.t, held: won, streak: S.bestStreak, when: Date.now() };
   if (!prevBest || record.score > prevBest.score || (won && !prevBest.held)) { best = record; saveState(BEST_KEY, best); S.newBest = true; }
   showBest();
+  S.crack0 = S.crack;
   if (won) { SFX.held(); strike(1.3); }
   else { SFX.collapse(); }
 }
@@ -281,7 +305,9 @@ function showEnd() {
   S.endShown = true;
   const scr = S.mode === 'win' ? ui.win : ui.lose;
   const tally = S.mode === 'win' ? ui.wintally : ui.losetally;
-  tally.innerHTML = `SCORE <b>${S.score.toLocaleString()}</b> &nbsp;·&nbsp; BRACED <b>${S.hits}</b> &nbsp;·&nbsp; STREAK <b>${S.bestStreak}</b>` + (S.mode === 'lose' ? ` &nbsp;·&nbsp; FELL AT <b>${Math.round(S.t)}s</b>` : '');
+  const items = [`SCORE <b>${S.score.toLocaleString()}</b>`, `BRACED <b>${S.hits}</b>`, `STREAK <b>${S.bestStreak}</b>`];
+  if (S.mode === 'lose') items.push(`FELL AT <b>${Math.round(S.t)}s</b>`);
+  tally.innerHTML = items.map((s) => `<span>${s}</span>`).join('');
   (S.mode === 'win' ? ui.winbest : ui.losebest).classList.toggle('on', !!S.newBest);
   scr.hidden = false;
   requestAnimationFrame(() => scr.classList.add('show'));
@@ -289,25 +315,35 @@ function showEnd() {
 
 /* ---------- marks: spawning, hitting, missing ---------- */
 function activeMarks() { return marks.filter((m) => m.active); }
-function spawn(t) {
+/* the brace to light: the mark nearest BELOW the tip along the zigzag (skipping the ones
+ * in `skip`); with the tip below every brace, the lowest one left */
+function nextBraceIdx(skip) {
+  const tipY = tipOf(S.crack);
+  for (let i = 0; i < 6; i++) if (MARK_POS[i][1] < tipY - 0.04 && !skip.includes(i)) return i;
+  for (let i = 5; i >= 0; i--) if (!skip.includes(i)) return i;
+  return 0;
+}
+function spawn(t, fork = false) {
   const spread = smooth(0, 60, t);
   const life = lerp(1.55, 0.78, spread);
-  const cand = [];
-  for (let i = 0; i < 6; i++) if (!marks[i].active && !marks[i + 6].active && i !== S.lastIdx) cand.push(i);
-  if (!cand.length) return;
-  const i = cand[Math.floor(Math.random() * cand.length)];
-  const refl = t > 38 && Math.random() < 0.38;
-  const m = marks[i + (refl ? 6 : 0)];
-  m.active = { born: t, life, hit: false };
-  m.el.classList.remove('dim', 'hit', 'miss'); m.el.classList.add('active');
-  S.lastIdx = i;
+  const first = nextBraceIdx([S.lastIdx]);
+  const idx = fork ? [first, nextBraceIdx([S.lastIdx, first])] : [first];
+  // late in the run the tarn braces too, but never with a reflection that projects off the screen
+  const refl = t > FORK_AT && Math.random() < 0.38 && idx.every((i) => !marks[i + 6].off);
+  const group = fork ? idx.slice() : null;
+  for (const i of idx) {
+    const m = marks[i + (refl ? 6 : 0)];
+    m.active = { born: t, life, fork: group };
+    m.el.classList.remove('dim', 'hit', 'miss'); m.el.classList.add('active');
+  }
   if (refl && !S.reflHinted) { S.reflHinted = true; showHint('The tarn braces too. Tap the reflection.'); }
+  else if (fork && !S.forkHinted) { S.forkHinted = true; showHint('The fissure forks. It runs to the brace you leave.'); }
 }
 function scheduleSpawn(t) {
-  const spread = smooth(0, 60, t);
-  S.nextSpawn = t + lerp(1.7, 0.72, spread) * rand(0.85, 1.15);
-  if (t > 24 && Math.random() < lerp(0.1, 0.5, smooth(24, 65, t))) S.spawnDelayed = t + 0.22;
+  S.nextSpawn = t + braceInterval(t) * rand(0.85, 1.15);
+  S.forkNext = t > FORK_AT && Math.random() < lerp(0.12, 0.35, smooth(FORK_AT, 65, t));
 }
+function crackTo(v) { S.crack = clamp(Math.max(v, CRACK_FLOOR * S.t / RUN_LENGTH), 0, 1); }
 function hitMark(m) {
   const a = m.active; const age = (S.t - a.born) / a.life;
   m.active = null;
@@ -316,17 +352,36 @@ function hitMark(m) {
   const mult = 1 + Math.min(Math.floor(S.streak / 5), 6) * 0.5;
   const gain = Math.round((100 + 120 * (1 - clamp(age, 0, 1)) + (m.refl ? 60 : 0)) * mult);
   S.score += gain;
-  S.crack = Math.max(0, S.crack - 0.012);
-  S.slowUntil = S.t + lerp(1.7, 0.72, smooth(0, 60, S.t)) * 0.85;
+  S.lastIdx = m.i;
+  // the wall lights where you braced and the tip recoils one segment
+  S.pulseT = S.time; S.pulsePos = marks[m.i].world;
+  let recoiled = false;
+  if (a.fork) {
+    // a fork: the other brace goes dark and the fissure runs to it (the recoil is spent
+    // on the run, so taking the lower fork holds the line and taking the upper one costs)
+    for (const o of activeMarks()) if (o.active.fork === a.fork) {
+      o.active = null; o.el.classList.remove('active'); o.el.classList.add('dim'); setTimeout(() => o.el.classList.remove('dim'), 400);
+      const target = crackAt(MARK_POS[o.i][1]) - RECOIL;
+      if (target > S.crack) { S.runTo = target; recoiled = true; }
+    }
+  }
+  if (!recoiled) crackTo(S.crack - RECOIL);
   SFX.hit(S.streak, m.refl);
   ripple(m.sx, m.sy, false);
   if (S.streak > 0 && S.streak % 10 === 0) showHint(`${S.streak} braced without a miss.`, 1.8);
 }
 function missMark(m, expired) {
+  const a = m.active;
   m.active = null;
   m.el.classList.remove('active'); m.el.classList.add('miss');
   setTimeout(() => m.el.classList.remove('miss'), 500);
-  jolt(expired ? 0.07 : 0.045, 1);
+  if (a && a.fork) {
+    // both forks left to run: one jolt, and the fissure runs to the lower of them
+    let lowest = m.i;
+    for (const o of activeMarks()) if (o.active.fork === a.fork) { o.active = null; o.el.classList.remove('active'); lowest = Math.max(lowest, o.i); }
+    S.runTo = crackAt(MARK_POS[lowest][1]);
+  }
+  jolt(expired ? COST_EXPIRE : COST_WRONG, 1);
 }
 function jolt(amount, k) {
   S.crack = Math.min(1, S.crack + amount);
@@ -352,14 +407,18 @@ function tapAt(x, y) {
   let near = null, nd = 1e9;
   for (const m of marks) { const d = Math.hypot(m.sx - x, m.sy - y); if (d < nd) { nd = d; near = m; } }
   ripple(x, y, true);
-  jolt(near && nd <= R ? 0.045 : 0.03, 0.5);
+  jolt(near && nd <= R ? COST_WRONG : COST_DARK, 0.5);
 }
 function pressKey(k) {
   if (S.mode !== 'play') return;
   const m = marks[k].active ? marks[k] : (marks[k + 6].active ? marks[k + 6] : null);
-  if (m) hitMark(m); else { ripple(marks[k].sx, marks[k].sy, true); jolt(0.045, 0.5); }
+  if (m) hitMark(m); else { ripple(marks[k].sx, marks[k].sy, true); jolt(COST_WRONG, 0.5); }
 }
-stage.addEventListener('pointerdown', (e) => { e.preventDefault(); tapAt(e.clientX, e.clientY); }, { passive: false });
+stage.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (S.mode === 'title') { startRun(); return; }   // the title screen itself is pointer-events:none
+  tapAt(e.clientX, e.clientY);
+}, { passive: false });
 addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (e.key >= '1' && e.key <= '6') { pressKey(e.key.charCodeAt(0) - 49); e.preventDefault(); return; }
@@ -374,7 +433,6 @@ addEventListener('keydown', (e) => {
 $('start').addEventListener('click', (e) => { e.stopPropagation(); startRun(); });
 $('again1').addEventListener('click', (e) => { e.stopPropagation(); startRun(); });
 $('again2').addEventListener('click', (e) => { e.stopPropagation(); startRun(); });
-ui.title.addEventListener('pointerdown', (e) => { if (e.target === ui.title) startRun(); });
 function toggleMute() { S.muted = !S.muted; A.setMuted(S.muted); $('mute').textContent = S.muted ? '—' : '♪'; }
 $('mute').addEventListener('click', (e) => { e.stopPropagation(); SFX.start(); toggleMute(); });
 
@@ -396,20 +454,23 @@ function tick(dt) {
     S.t += dt;
     const t = S.t;
     if (S.time >= S.nextFlash) { strike(rand(0.8, 1.3)); S.nextFlash = S.time + lerp(rand(2.6, 5.5), rand(1.4, 3.2), smooth(0, 60, t)); }
-    // the fissure runs
-    let rate = 0.016 + 0.0005 * t;
-    if (t < S.slowUntil) rate *= 0.35;
-    S.crack = Math.min(1, S.crack + rate * dt);
+    // the fissure runs: the clock. Between two braces the tip creeps CREEP_PER_BRACE,
+    // a hit recoils it RECOIL, and the floor under it rises to CRACK_FLOOR by the causeway.
+    let v = S.crack + (CREEP_PER_BRACE / braceInterval(t)) * dt;
+    if (S.runTo >= 0) {
+      // a fork left to run: the tip races to the brace you did not take
+      if (v < S.runTo) v = Math.min(S.runTo, v + 0.9 * dt); else S.runTo = -1;
+    }
+    crackTo(v);
     S.jolt *= Math.exp(-dt / 0.35);
-    // marks
-    if (t >= S.nextSpawn) { spawn(t); scheduleSpawn(t); }
-    if (S.spawnDelayed && t >= S.spawnDelayed) { S.spawnDelayed = 0; spawn(t); }
-    for (const m of activeMarks()) if (t - m.active.born > m.active.life) missMark(m, true);
+    // braces, one at a time (a fork lights two)
+    if (t >= S.nextSpawn) { if (activeMarks().length) S.nextSpawn = t + 0.12; else { spawn(t, S.forkNext); scheduleSpawn(t); } }
+    for (const m of activeMarks()) if (m.active && t - m.active.born > m.active.life) missMark(m, true);
     // creaks
     if (S.time - S.lastCreak > lerp(3.2, 0.7, S.crack) && Math.random() < dt * 1.5) { S.lastCreak = S.time; SFX.creak(S.crack); if (S.crack > 0.6) S.shake = Math.max(S.shake, 0.15 * S.crack); }
     if (S.hintT && S.time > S.hintT) { ui.hint.classList.remove('on'); S.hintT = 0; }
     S.mist = 0.15 * S.crack;
-    if (t > 12 && !S.hint2) { S.hint2 = true; if (t < 15) showHint('Every miss runs the crack lower. Lightning shows the braces.'); }
+    if (t > 12 && !S.hint2) { S.hint2 = true; if (t < 15) showHint('The brace lights just below the tip. Every miss lets it run.'); }
     if (S.crack >= 1) { endRun(false); return; }
     if (t >= RUN_LENGTH) { endRun(true); return; }
   } else if (S.mode === 'lose') {
@@ -426,14 +487,18 @@ function tick(dt) {
     if (e > 5.6 && !S.endShown) showEnd();
     if (e > 8 && S.time >= S.nextFlash) { strike(0.6); S.nextFlash = S.time + rand(4, 8); }
   } else if (S.mode === 'win') {
+    // the house held: the fissure seals bone-white from the tarn up, the windows light
+    // one by one, and the storm clears to a cold moon
     S.endT += dt; const e = S.endT;
     S.jolt *= Math.exp(-dt / 0.5);
     S.mist = 0;
-    S.crack = Math.max(0, S.crack - dt * 0.03);
+    S.seal = smooth(0.3, 2.4, e);
+    S.crack = S.crack0 * (1 - smooth(0.8, 4.2, e));
+    S.winLit = smooth(1.6, 5.2, e);
+    S.clear = smooth(2.2, 7.5, e);
     if (e > 3.2 && e < 3.25 && S.flash < 0.5) strike(1.2);
     if (e > 4.2 && !S.endShown) showEnd();
-    S.flash = Math.max(S.flash, (0.34 + 0.06 * Math.sin(S.time * 5.0)) * smooth(3.4, 4.5, e));
-    if (e > 5 && S.time >= S.nextFlash) { strike(0.9); S.nextFlash = S.time + rand(3, 6); }
+    if (e > 5 && S.time >= S.nextFlash) { strike(0.5 * (1 - 0.7 * S.clear)); S.nextFlash = S.time + rand(5, 9); }
   }
   // shake decay
   S.shake *= Math.exp(-dt / 0.35);
@@ -453,7 +518,7 @@ function placeCamera() {
   const sway = reduced ? 0 : 1;
   const px = Math.sin(tm * 0.09) * 0.35 * sway * drift + S.shakeX;
   const py = height + Math.sin(tm * 0.13) * 0.06 * sway + S.shakeY;
-  setCamera([px, py, -dist], [tx + S.shakeX * 0.5, ty + S.shakeY * 0.5, 0], dist);
+  setCamera([px, py, -dist], [tx + S.shakeX * 0.5, ty + S.shakeY * 0.5, 0], dist, S.mode !== 'title');
 }
 
 /* ---------- render ---------- */
@@ -466,11 +531,13 @@ function render(now) {
   while (acc > 0 && n < 4) { tick(Math.min(acc, stepDt)); acc -= stepDt; n++; }
   placeCamera();
 
-  // active brace light
+  // active brace light; a hit flares the wall to 3x where you braced for 200ms
   const act = activeMarks();
-  const lit = act.find((m) => !m.refl) || act[0];
-  if (lit) { S.markPos = lit.world; S.markI = lerp(S.markI, 1, 0.3); } else S.markI *= 0.8;
-  const tipY = 6.35 - 6.55 * S.crack;
+  const lit = act[0];
+  const pulse = Math.max(0, 1 - (S.time - S.pulseT) / 0.2);
+  if (pulse > 0) { S.markPos = S.pulsePos; S.markI = 3 * pulse; }
+  else if (lit) { S.markPos = marks[lit.i].world; S.markI = lerp(S.markI, 1, 0.3); } else S.markI *= 0.8;
+  const tipY = tipOf(S.crack);
   const depth = 0.1 + 3.0 * Math.pow(S.crack, 1.6) + (S.mode === 'lose' ? 3 : 0);
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
@@ -480,8 +547,9 @@ function render(now) {
   gl.uniform2f(u.uRes, SW, SH);
   gl.uniform1f(u.uTime, S.time);
   gl.uniform3fv(u.uCamPos, cam.pos); gl.uniform3fv(u.uCamFwd, cam.fwd); gl.uniform3fv(u.uCamRight, cam.right); gl.uniform3fv(u.uCamUp, cam.up);
-  gl.uniform1f(u.uFocal, cam.focal);
+  gl.uniform1f(u.uFocal, cam.focal); gl.uniform1f(u.uShift, cam.shift);
   gl.uniform1f(u.uCrack, S.crack); gl.uniform1f(u.uTipY, tipY); gl.uniform1f(u.uDepth, depth);
+  gl.uniform1f(u.uSeal, S.seal); gl.uniform1f(u.uClear, S.clear); gl.uniform1f(u.uWinLit, S.winLit);
   gl.uniform1f(u.uFlash, S.flash); gl.uniform3fv(u.uFlashDir, S.flashDir);
   gl.uniform1f(u.uBolt, S.bolt); gl.uniform1f(u.uBoltAz, S.boltAz); gl.uniform1f(u.uBoltSeed, S.boltSeed);
   gl.uniform3fv(u.uMark, S.markPos); gl.uniform1f(u.uMarkI, S.markI);
@@ -510,23 +578,43 @@ function render(now) {
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 
   layoutMarks();
+  layoutTitle();
   updateHud(false);
 
   // adaptive resolution: keep a real GPU near 60, let slow machines drop
   if (!software && !lockScale) {
-    frameAvg = frameAvg * 0.92 + (now - (render.prev || now)) * 0.08; render.prev = now;
-    adaptT += dt;
-    if (adaptT > 1.2) { adaptT = 0; if (frameAvg > 26 && scale > minScale) { scale = Math.max(minScale, scale * 0.82); sizeScene(); } else if (frameAvg < 13 && scale < (touch ? 0.42 : 0.6)) { scale = Math.min(touch ? 0.42 : 0.6, scale * 1.1); sizeScene(); } }
+    if (S.mode === 'lose' && S.endT < 8) {
+      // the collapse is the poster: hold a high internal scale so the split does not staircase
+      const want = touch ? 0.55 : 0.75;
+      if (!S.pushed) { S.pushed = true; scale = want; sizeScene(); }
+    } else {
+      if (S.pushed) { S.pushed = false; scale = touch ? 0.34 : 0.5; sizeScene(); frameAvg = 16; render.prev = now; }
+      frameAvg = frameAvg * 0.92 + (now - (render.prev || now)) * 0.08; render.prev = now;
+      adaptT += dt;
+      if (adaptT > 1.2) { adaptT = 0; if (frameAvg > 26 && scale > minScale) { scale = Math.max(minScale, scale * 0.82); sizeScene(); } else if (frameAvg < 13 && scale < (touch ? 0.42 : 0.6)) { scale = Math.min(touch ? 0.42 : 0.6, scale * 1.1); sizeScene(); } }
+    }
   }
   requestAnimationFrame(render);
 }
 
+/* the title lockup: FISSURE lies across the facade with its red U on the crack line */
+const wordEl = $('word'), wordU = $('wordU');
+function layoutTitle() {
+  if (S.mode !== 'title') return;
+  const p = project([0.2, 3.35, FZ]);   // on the zigzag at mid-facade
+  if (!p) return;
+  const uc = wordU.offsetLeft + wordU.offsetWidth / 2;
+  const w = wordEl.offsetWidth, h = wordEl.offsetHeight;
+  const x = clamp(p[0] - uc, 14, Math.max(14, W - w - 14));
+  wordEl.style.transform = `translate3d(${x.toFixed(1)}px,${(p[1] - h / 2).toFixed(1)}px,0)`;
+}
 function layoutMarks() {
   const showAll = S.mode === 'play';
   for (const m of marks) {
     const p = project(m.world);
-    if (!p) { m.el.style.opacity = '0'; continue; }
+    if (!p) { m.el.style.opacity = '0'; m.off = true; continue; }
     m.sx = p[0]; m.sy = p[1];
+    m.off = p[1] > H - 40 || p[1] < 40 || p[0] < 30 || p[0] > W - 30;
     m.el.style.transform = `translate3d(${p[0].toFixed(1)}px,${p[1].toFixed(1)}px,0)`;
     if (!showAll) { if (!m.el.classList.contains('hit')) m.el.style.opacity = '0'; continue; }
     if (m.active) {
@@ -555,13 +643,17 @@ function updateHud(force) {
 /* ---------- debug / playtest hook ---------- */
 window.__poe = {
   get state() { return S.mode; }, get crack() { return S.crack; }, get score() { return S.score; }, get t() { return S.t; },
-  get marks() { return marks.map((m) => ({ i: m.i, refl: m.refl, x: m.sx, y: m.sy, active: !!m.active })); },
+  get marks() { return marks.map((m) => ({ i: m.i, refl: m.refl, x: m.sx, y: m.sy, off: m.off, active: !!m.active, born: m.active ? m.active.born : -1, fork: !!(m.active && m.active.fork) })); },
+  get tipY() { return tipOf(S.crack); },
   start: startRun,
   ff(seconds, autoHit = true) {
     // fast-forward the simulation, hitting every brace as it appears
     const step = 1 / 30; let n = Math.round(seconds / step);
-    while (n-- > 0) { tick(step); if (autoHit && S.mode === 'play') for (const m of activeMarks()) if (S.t - m.active.born > 0.15) hitMark(m); }
+    while (n-- > 0) { tick(step); if (autoHit && S.mode === 'play') for (const m of activeMarks()) if (m.active && S.t - m.active.born > 0.15) hitMark(m); }
   },
+  // one fixed step plus a camera/marks layout without drawing — for in-page bots
+  step(dt = 1 / 60) { tick(dt); placeCamera(); layoutMarks(); },
+  layout() { placeCamera(); layoutMarks(); },
   setCrack(v) { S.crack = clamp(v, 0, 1); },
   forceWin() { S.t = RUN_LENGTH; },
   forceLose() { S.crack = 1; },
