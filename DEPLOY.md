@@ -59,3 +59,63 @@ the site: `index.html`, `favicon.svg`, `netlify.toml`, `launcher/`, `shared/`,
    then open `/`, `/games/the-raven/`, `/games/black-cat/` and
    `/games/masque-red-death/` in a browser and check the console is clean.
    `node tools/verify.mjs` runs the same checks against a local copy.
+
+## Claude Artifacts
+
+The arcade is also published as ten Claude Artifacts: one per game plus the
+launcher. Each artifact is a single self-contained HTML file (no external
+requests), produced by `tools/bundle-artifact.mjs`, which inlines fonts,
+scripts, ES-module graphs, GLSL and wasm as data. Every artifact is its own
+origin, so the launcher opens games in a new tab and cannot read their best
+scores ("best: —" on the launcher is expected).
+
+Procedure (the URLs are only known after publishing, so it is a three-pass
+loop):
+
+1. Bundle every page:
+
+       for s in tell-tale-heart masque-red-death pit-and-pendulum house-of-usher \
+                maelstrom gold-bug amontillado the-raven black-cat launcher; do
+         node tools/bundle-artifact.mjs $s
+       done
+
+   Bundles land in `$POE_BUNDLE_OUT_DIR` (default: the session scratchpad).
+   `node tools/bundle-check.mjs` loads each one headless and checks for
+   console errors, failed requests and bundling misses.
+
+2. Publish each game bundle with the Artifact tool (title from its `<title>`,
+   emoji favicon). Note the URL of each. The game's back link still reads
+   `LAUNCHER_URL_PLACEHOLDER` at this point.
+
+3. In the launcher bundle, replace `GAME_URL_PLACEHOLDER_<slug>` with each
+   game's URL (the bundled launcher emits it as the template literal
+   `GAME_URL_PLACEHOLDER_${g.slug}`; swap that for a `GAME_URLS[g.slug]`
+   lookup table), keep `target="_blank" rel="noopener"` on the drawer links,
+   grep that no placeholder remains, and publish the launcher.
+
+4. Replace `LAUNCHER_URL_PLACEHOLDER` in each game bundle (exactly one
+   occurrence, in the bundled `shared/poe.js` `mountBack`) and in the launcher
+   itself (its footer self-link) with the launcher URL, then republish each
+   as a NEW VERSION of the existing artifact by passing the existing artifact
+   URL to the Artifact tool (`url`), so no duplicates are created. Confirm the
+   returned URL is unchanged.
+
+5. Verify with the Artifact tool's `read` action (the stored HTML is the
+   bundle wrapped in the publisher's skeleton) — Chromium in the sandbox
+   cannot reach `claude.ai`, so live rendering has to be checked from a
+   normal browser.
+
+Published 2026-09-06:
+
+| Page | URL |
+|---|---|
+| A Cabinet of Poe (launcher) | https://claude.ai/code/artifact/ec61e301-6cf9-4fa8-abf8-3d0585e4e8bf |
+| Under the Boards — The Tell-Tale Heart | https://claude.ai/code/artifact/8e822acc-dfa7-4ba3-867e-8123c63e10f7 |
+| Seven Chambers — The Masque of the Red Death | https://claude.ai/code/artifact/3ea4990e-0d16-4bfe-a7a4-2e639af8965e |
+| The Descending Blade — The Pit and the Pendulum | https://claude.ai/code/artifact/ece5642d-cff8-4899-83ca-742631c6ae99 |
+| Fissure — The Fall of the House of Usher | https://claude.ai/code/artifact/812df68a-be8f-4830-af9d-df73c686a8a7 |
+| The Vortex — A Descent into the Maelström | https://claude.ai/code/artifact/cdd08e5a-af12-4628-9337-3963c18d99b7 |
+| Kidd's Cipher — The Gold-Bug | https://claude.ai/code/artifact/cd9be56e-1714-40b1-a0c0-14ef16362039 |
+| Brick by Brick — The Cask of Amontillado | https://claude.ai/code/artifact/7f96db88-bf30-4787-a80d-9004177baaaf |
+| Nevermore — The Raven | https://claude.ai/code/artifact/d1b1f4c6-8797-4fa6-b5e0-bfdc488e4fb1 |
+| Pluto — The Black Cat | https://claude.ai/code/artifact/5db7d530-053d-4674-b31d-1f81995f5345 |
