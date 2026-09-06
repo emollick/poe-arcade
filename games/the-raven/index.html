@@ -1,4 +1,290 @@
-<!doctype html><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>The Raven</title>
-<!-- PLACEHOLDER. Story: The Raven (games/the-raven/). Overwrite this file entirely. -->
-<body style="background:#0a0908;color:#e8e2d4;font:16px/1.6 system-ui;display:grid;place-items:center;height:100vh;margin:0"><p>The Raven — game pending</p>
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Raven — Nevermore</title>
+<link rel="stylesheet" href="/shared/fonts.css">
+<link rel="stylesheet" href="/shared/poe.css">
+<link rel="stylesheet" href="style.css">
+
+<div id="stage" class="is-title">
+
+  <div id="hud" aria-live="polite">
+    <span id="hudScore">SCORE <b>0</b></span>
+    <span id="hudStreak">STREAK <b>×1</b></span>
+    <span id="hudSafe">MERCIES <b>0</b> / XVIII</span>
+  </div>
+
+  <div id="plateWrap">
+  <!-- ═══════════════════════════ THE PLATE ═══════════════════════════
+       One inline SVG. Everything is stroke or pattern; the only colour is
+       the lamp's flame. Classes: .ink = a stroke that draws itself in,
+       .wash = a patterned/filled area that fades in after the line work. -->
+  <svg id="plate" viewBox="0 0 1400 900" preserveAspectRatio="xMidYMax meet" role="img"
+       aria-label="An engraving: a raven perched on a bust of Pallas above a chamber door; a narrator slumped in a chair; a lamp; a window with a drawn curtain.">
+    <defs>
+      <pattern id="pHatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <line x1="0" y1="0" x2="0" y2="7" stroke="#0b0a09" stroke-width="1.15"/>
+      </pattern>
+      <pattern id="pHatchL" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <line x1="0" y1="0" x2="0" y2="9" stroke="#0b0a09" stroke-width=".8" opacity=".55"/>
+      </pattern>
+      <pattern id="pCross" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <line x1="0" y1="0" x2="0" y2="6" stroke="#0b0a09" stroke-width="1.1"/>
+        <line x1="0" y1="3" x2="6" y2="3" stroke="#0b0a09" stroke-width="1.1"/>
+      </pattern>
+      <pattern id="pDense" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <rect width="4" height="4" fill="#0b0a09" opacity=".62"/>
+        <line x1="0" y1="0" x2="0" y2="4" stroke="#0b0a09" stroke-width="1.6"/>
+        <line x1="0" y1="2" x2="4" y2="2" stroke="#0b0a09" stroke-width="1.2"/>
+      </pattern>
+      <pattern id="pFloorA" width="10" height="5" patternUnits="userSpaceOnUse">
+        <line x1="0" y1="2.5" x2="10" y2="2.5" stroke="#0b0a09" stroke-width=".9" opacity=".7"/>
+      </pattern>
+      <pattern id="pFloorB" width="10" height="8" patternUnits="userSpaceOnUse">
+        <line x1="0" y1="4" x2="10" y2="4" stroke="#0b0a09" stroke-width="1" opacity=".75"/>
+      </pattern>
+      <pattern id="pWall" width="8" height="10" patternUnits="userSpaceOnUse">
+        <line x1="4" y1="0" x2="4" y2="10" stroke="#0b0a09" stroke-width=".7" opacity=".42"/>
+      </pattern>
+      <pattern id="pVelvet" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(-30)">
+        <line x1="0" y1="0" x2="0" y2="5" stroke="#0b0a09" stroke-width="1.5"/>
+      </pattern>
+      <radialGradient id="gVig" cx="50%" cy="46%" r="72%">
+        <stop offset="52%" stop-color="#000"/>
+        <stop offset="100%" stop-color="#fff"/>
+      </radialGradient>
+      <mask id="mVig"><rect x="0" y="0" width="1400" height="900" fill="url(#gVig)"/></mask>
+      <radialGradient id="gGlow">
+        <stop offset="0%" stop-color="#c9a24a" stop-opacity=".8"/>
+        <stop offset="45%" stop-color="#c9a24a" stop-opacity=".28"/>
+        <stop offset="100%" stop-color="#c9a24a" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="gDawn" cx="50%" cy="40%" r="70%">
+        <stop offset="0%" stop-color="#fff9e6"/>
+        <stop offset="100%" stop-color="#efe6d3"/>
+      </radialGradient>
+      <clipPath id="cPlate"><rect x="36" y="36" width="1328" height="828"/></clipPath>
+      <clipPath id="cWindow"><path d="M1060,640 L1060,465 A115,115 0 0 1 1290,465 L1290,640 Z"/></clipPath>
+
+      <!-- the Raven, facing left, feet at 0,0 -->
+      <g id="ravenSil">
+        <path d="M-72,-50 L-42,-60 C-34,-82 -2,-90 10,-78 C30,-76 48,-62 58,-46 C72,-36 96,-20 120,8 L106,12 C92,-2 74,-8 56,-10 C34,-12 14,-16 -6,-28 C-22,-38 -34,-44 -46,-46 Z"/>
+      </g>
+      <path id="featherSil" d="M0,0 C7,-12 11,-28 5,-46 C-1,-30 -7,-14 0,0 Z"/>
+    </defs>
+
+    <!-- ground of the plate -->
+    <rect x="0" y="0" width="1400" height="900" fill="#efe6d3"/>
+
+    <g id="scene" clip-path="url(#cPlate)">
+      <!-- wall -->
+      <rect id="wallHatch" class="wash" style="--d:200" x="36" y="36" width="1328" height="654" fill="url(#pWall)"/>
+      <rect class="wash" style="--d:900" x="36" y="612" width="1328" height="78" fill="url(#pHatchL)"/>
+      <line class="ink" style="--d:300" x1="36" y1="612" x2="1364" y2="612" stroke="#0b0a09" stroke-width="2"/>
+      <!-- floor -->
+      <line class="ink" style="--d:100" x1="36" y1="690" x2="1364" y2="690" stroke="#0b0a09" stroke-width="2.5"/>
+      <rect class="wash" style="--d:700" x="36" y="690" width="1328" height="70" fill="url(#pFloorA)"/>
+      <rect class="wash" style="--d:800" x="36" y="760" width="1328" height="110" fill="url(#pFloorB)"/>
+      <g class="ink" style="--d:400" stroke="#0b0a09" stroke-width="1.2" fill="none">
+        <path d="M111,690 L-100,866 M259,690 L100,866 M406,690 L300,866 M553,690 L500,866 M700,690 L700,866 M847,690 L900,866 M994,690 L1100,866 M1141,690 L1300,866 M1289,690 L1500,866"/>
+      </g>
+
+      <!-- ═══ WINDOW · CURTAIN (right) ═══ -->
+      <g id="window">
+        <g id="night" class="wash" style="--d:1100">
+          <path d="M1060,640 L1060,465 A115,115 0 0 1 1290,465 L1290,640 Z" fill="url(#pDense)"/>
+          <g clip-path="url(#cWindow)">
+            <circle cx="1232" cy="428" r="24" fill="#efe6d3"/>
+            <circle cx="1244" cy="418" r="22" fill="#0b0a09" opacity=".92"/>
+          </g>
+        </g>
+        <g id="dawn" clip-path="url(#cWindow)" opacity="0">
+          <rect x="1060" y="350" width="230" height="290" fill="url(#gDawn)"/>
+          <g stroke="#0b0a09" stroke-width="1" fill="none" opacity=".5">
+            <path d="M1070,500 q40,-6 80,0 t80,0 M1090,530 q30,-5 60,0 t60,0 M1120,560 q30,-5 60,0 t60,0"/>
+          </g>
+        </g>
+        <g class="ink" style="--d:500" stroke="#0b0a09" fill="none">
+          <path d="M1060,640 L1060,465 A115,115 0 0 1 1290,465 L1290,640 Z" stroke-width="6"/>
+          <path d="M1175,350 L1175,640 M1060,465 L1290,465 M1060,555 L1290,555" stroke-width="4"/>
+        </g>
+        <rect class="ink fillin" style="--d:600" x="1046" y="640" width="256" height="12" fill="#efe6d3" stroke="#0b0a09" stroke-width="2"/>
+        <rect class="wash" style="--d:1000" x="1046" y="646" width="256" height="6" fill="url(#pHatch)"/>
+        <!-- curtain -->
+        <g id="curtain">
+          <line class="ink" style="--d:700" x1="1004" y1="338" x2="1312" y2="338" stroke="#0b0a09" stroke-width="4"/>
+          <circle class="ink fillin" style="--d:700" cx="1002" cy="338" r="6" fill="#0b0a09" stroke="#0b0a09"/>
+          <circle class="ink fillin" style="--d:700" cx="1314" cy="338" r="6" fill="#0b0a09" stroke="#0b0a09"/>
+          <g id="drape">
+            <path class="ink fillin" style="--d:800" d="M1016,342 L1114,342 C1106,420 1112,520 1092,600 C1082,640 1064,660 1052,674 L1012,674 Z" fill="url(#pHatch)" stroke="#0b0a09" stroke-width="2.5"/>
+            <path class="ink" style="--d:1000" d="M1040,344 C1046,440 1042,540 1032,668 M1064,344 C1070,440 1066,540 1054,666 M1088,344 C1094,440 1092,520 1076,624" stroke="#0b0a09" stroke-width="1.4" fill="none"/>
+            <path class="ink" style="--d:1100" d="M1018,532 Q1060,552 1100,530" stroke="#0b0a09" stroke-width="3" fill="none"/>
+          </g>
+        </g>
+      </g>
+
+      <!-- ═══ DOOR · CORNICE (centre) ═══ -->
+      <g id="door">
+        <rect class="ink fillin" style="--d:200" x="548" y="330" width="304" height="360" fill="#efe6d3" stroke="#0b0a09" stroke-width="3"/>
+        <rect class="wash" style="--d:900" x="548" y="330" width="18" height="360" fill="url(#pHatch)"/>
+        <rect class="wash" style="--d:900" x="548" y="330" width="304" height="16" fill="url(#pHatchL)"/>
+        <rect class="ink" style="--d:350" x="566" y="346" width="268" height="344" fill="none" stroke="#0b0a09" stroke-width="2"/>
+        <rect class="wash" style="--d:1000" x="566" y="346" width="268" height="344" fill="url(#pWall)" opacity=".6"/>
+        <g class="ink" style="--d:500" fill="none" stroke="#0b0a09" stroke-width="1.8">
+          <rect x="584" y="364" width="104" height="150"/><rect x="712" y="364" width="104" height="150"/>
+          <rect x="584" y="530" width="104" height="142"/><rect x="712" y="530" width="104" height="142"/>
+          <rect x="594" y="374" width="84" height="130"/><rect x="722" y="374" width="84" height="130"/>
+          <rect x="594" y="540" width="84" height="122"/><rect x="722" y="540" width="84" height="122"/>
+        </g>
+        <g class="wash" style="--d:1100" fill="url(#pHatchL)">
+          <rect x="584" y="364" width="10" height="150"/><rect x="712" y="364" width="10" height="150"/>
+          <rect x="584" y="530" width="10" height="142"/><rect x="712" y="530" width="10" height="142"/>
+          <rect x="584" y="364" width="104" height="10"/><rect x="712" y="364" width="104" height="10"/>
+          <rect x="584" y="530" width="104" height="10"/><rect x="712" y="530" width="104" height="10"/>
+        </g>
+        <circle class="ink fillin" style="--d:900" cx="818" cy="522" r="6" fill="#0b0a09" stroke="#0b0a09"/>
+        <!-- cornice -->
+        <rect class="ink fillin" style="--d:250" x="534" y="286" width="332" height="44" fill="#efe6d3" stroke="#0b0a09" stroke-width="3"/>
+        <path class="ink" style="--d:400" d="M534,298 L866,298 M534,308 L866,308" stroke="#0b0a09" stroke-width="1.5"/>
+        <rect class="wash" style="--d:1000" x="534" y="312" width="332" height="18" fill="url(#pHatch)"/>
+      </g>
+
+      <!-- ═══ THE SHADOW on the floor ═══ -->
+      <g id="shadow">
+        <ellipse class="wash" style="--d:1300" cx="640" cy="738" rx="78" ry="16" fill="url(#pHatch)"/>
+        <use class="wash" style="--d:1400" href="#ravenSil" transform="translate(688,738) matrix(1.35,0,-0.9,0.5,0,0)" fill="url(#pDense)"/>
+      </g>
+
+      <!-- ═══ LAMP (right of the door) ═══ -->
+      <g id="lamp">
+        <circle id="glow" cx="960" cy="520" r="260" fill="url(#gGlow)"/>
+        <ellipse class="ink fillin" style="--d:600" cx="960" cy="690" rx="36" ry="9" fill="#efe6d3" stroke="#0b0a09" stroke-width="2"/>
+        <rect class="wash" style="--d:1200" x="924" y="690" width="72" height="9" fill="url(#pHatch)"/>
+        <rect class="ink fillin" style="--d:650" x="954" y="578" width="12" height="112" fill="url(#pHatchL)" stroke="#0b0a09" stroke-width="2"/>
+        <ellipse class="ink fillin" style="--d:700" cx="960" cy="560" rx="26" ry="19" fill="#efe6d3" stroke="#0b0a09" stroke-width="2.2"/>
+        <path class="wash" style="--d:1200" d="M960,541 C978,543 986,552 986,560 C986,569 978,578 960,579 C972,570 972,550 960,541 Z" fill="url(#pHatch)"/>
+        <rect class="ink fillin" style="--d:750" x="948" y="534" width="24" height="8" fill="#0b0a09" stroke="#0b0a09"/>
+        <path class="ink" style="--d:800" d="M944,534 L944,474 Q960,448 976,474 L976,534" fill="none" stroke="#0b0a09" stroke-width="1.6"/>
+        <g id="flame">
+          <g id="flameFlick">
+            <path d="M960,532 C938,508 944,484 960,458 C976,484 982,508 960,532 Z" fill="#b8902c"/>
+            <path d="M960,526 C950,512 952,498 960,480 C968,498 970,512 960,526 Z" fill="#e6c15a"/>
+            <animateTransform attributeName="transform" type="scale" additive="sum"
+              values="1 1;1.05 1.06;0.97 0.95;1.03 1.02;0.98 1.04;1 1" dur="0.9s" repeatCount="indefinite"/>
+          </g>
+        </g>
+      </g>
+
+      <!-- ═══ CHAIR · NARRATOR · TABLE (left) ═══ -->
+      <g id="table">
+        <rect class="ink fillin" style="--d:500" x="232" y="600" width="92" height="9" fill="#efe6d3" stroke="#0b0a09" stroke-width="2"/>
+        <path class="ink" style="--d:600" d="M242,609 L236,690 M314,609 L320,690 M239,650 L317,650" stroke="#0b0a09" stroke-width="2.5" fill="none"/>
+        <rect class="ink fillin" style="--d:700" x="248" y="584" width="48" height="16" fill="#efe6d3" stroke="#0b0a09" stroke-width="1.8"/>
+        <rect class="ink fillin" style="--d:750" x="254" y="570" width="42" height="14" fill="#efe6d3" stroke="#0b0a09" stroke-width="1.8"/>
+        <rect class="wash" style="--d:1200" x="248" y="584" width="8" height="16" fill="url(#pHatch)"/>
+        <rect class="wash" style="--d:1200" x="254" y="570" width="8" height="14" fill="url(#pHatch)"/>
+      </g>
+      <g id="chair">
+        <path class="ink fillin" style="--d:300" d="M380,412 Q380,396 396,396 L420,396 Q436,396 436,412 L436,604 L380,604 Z" fill="url(#pVelvet)" stroke="#0b0a09" stroke-width="2.5"/>
+        <path class="ink fillin" style="--d:400" d="M380,590 L534,590 L534,624 L380,624 Z" fill="url(#pVelvet)" stroke="#0b0a09" stroke-width="2.5"/>
+        <path class="ink" style="--d:500" d="M384,624 L380,690 M530,624 L534,690 M382,660 L532,660" stroke="#0b0a09" stroke-width="4" fill="none" stroke-linecap="round"/>
+      </g>
+      <g id="narrator">
+        <!-- legs -->
+        <path class="ink fillin" style="--d:600" d="M424,588 L508,576 L516,602 L430,618 Z" fill="url(#pCross)" stroke="#0b0a09" stroke-width="2"/>
+        <path class="ink fillin" style="--d:650" d="M500,582 L524,580 L530,688 L508,688 Z" fill="url(#pCross)" stroke="#0b0a09" stroke-width="2"/>
+        <path class="ink fillin" style="--d:700" d="M506,682 L548,688 L548,691 L504,691 Z" fill="#0b0a09" stroke="#0b0a09"/>
+        <!-- coat and the far arm, one dark mass -->
+        <path class="ink fillin" style="--d:550" d="M414,598 C408,552 426,516 458,500 L482,492 C500,506 508,540 512,584 L496,590 C492,560 484,536 472,522 L464,598 Z" fill="url(#pDense)" stroke="#0b0a09" stroke-width="2"/>
+        <path class="ink" style="--d:950" d="M430,590 C428,556 440,528 462,512 M482,496 C494,516 500,548 504,580" fill="none" stroke="#efe6d3" stroke-width="1.3"/>
+        <!-- forearm up to the brow -->
+        <path class="ink fillin" style="--d:700" d="M492,590 L510,584 L500,494 L484,498 Z" fill="url(#pDense)" stroke="#0b0a09" stroke-width="2"/>
+        <path class="ink" style="--d:1000" d="M498,582 L490,504" fill="none" stroke="#efe6d3" stroke-width="1.2"/>
+        <!-- head, bowed into the hand -->
+        <g transform="rotate(18 490 474)">
+          <circle class="ink fillin" style="--d:600" cx="490" cy="474" r="22" fill="#efe6d3" stroke="#0b0a09" stroke-width="2"/>
+          <path class="ink fillin" style="--d:650" d="M468,470 C468,442 508,438 514,470 C504,456 482,452 468,470 Z" fill="#0b0a09" stroke="#0b0a09"/>
+          <path class="wash" style="--d:1100" d="M490,452 C504,454 512,466 511,480 C510,490 502,496 494,496 C506,486 506,464 490,452 Z" fill="url(#pHatch)"/>
+          <path class="ink" style="--d:800" d="M511,472 l5,4 l-5,4 M498,490 q6,2 10,-2" fill="none" stroke="#0b0a09" stroke-width="1.6"/>
+        </g>
+        <circle class="ink fillin" style="--d:750" cx="494" cy="492" r="9" fill="#efe6d3" stroke="#0b0a09" stroke-width="1.8"/>
+        <!-- the near arm of the chair, in front of him -->
+        <path class="ink" style="--d:500" d="M436,516 L520,516 L520,590" stroke="#0b0a09" stroke-width="4" fill="none" stroke-linecap="round"/>
+      </g>
+      <!-- the shroud: the shadow takes him -->
+      <use id="shroud" href="#ravenSil" transform="translate(556,702) scale(-2.7,2.7)" fill="url(#pDense)" opacity="0"/>
+
+      <!-- ═══ BUST OF PALLAS ═══ -->
+      <g id="bust">
+        <rect class="ink fillin" style="--d:200" x="660" y="272" width="80" height="14" fill="#efe6d3" stroke="#0b0a09" stroke-width="2.2"/>
+        <path class="ink fillin" style="--d:250" d="M656,272 C658,248 672,238 690,231 L690,204 L710,204 L710,231 C728,238 742,248 744,272 Z" fill="#efe6d3" stroke="#0b0a09" stroke-width="2.2"/>
+        <path class="wash" style="--d:1000" d="M710,208 L710,231 C728,238 742,248 744,272 L724,272 C722,250 716,240 706,236 Z" fill="url(#pHatchL)"/>
+        <ellipse class="ink fillin" style="--d:300" cx="700" cy="175" rx="27" ry="33" fill="#efe6d3" stroke="#0b0a09" stroke-width="2.2"/>
+        <path class="wash" style="--d:1050" d="M700,142 C720,146 728,160 727,180 C726,196 716,206 706,208 C716,196 720,170 700,142 Z" fill="url(#pHatchL)"/>
+        <path class="ink fillin" style="--d:350" d="M670,168 C670,126 730,126 730,168 Q700,160 670,168 Z" fill="#efe6d3" stroke="#0b0a09" stroke-width="2.2"/>
+        <path class="ink fillin" style="--d:400" d="M696,132 C700,100 738,90 766,110 C744,110 722,122 712,140 Z" fill="url(#pHatch)" stroke="#0b0a09" stroke-width="1.8"/>
+        <path class="ink" style="--d:500" d="M666,171 Q700,161 734,171" fill="none" stroke="#0b0a09" stroke-width="1.6"/>
+        <path class="ink" style="--d:600" d="M684,180 q7,-5 14,0 M702,180 q7,-5 14,0 M700,182 l-4,12 l8,0 M691,203 q9,5 18,0" fill="none" stroke="#0b0a09" stroke-width="1.5" stroke-linecap="round"/>
+      </g>
+
+      <!-- ═══ THE RAVEN ═══ -->
+      <g id="raven" transform="translate(700 138)">
+        <g id="ravenBody">
+          <path id="wingUp" d="M10,-62 C24,-104 66,-134 108,-122 C74,-112 52,-92 40,-62 Z" fill="#0b0a09" opacity="0"/>
+          <use class="ink fillin" style="--d:150" href="#ravenSil" fill="#0b0a09" stroke="#0b0a09" stroke-width="2"/>
+          <path id="beakLow" d="M-72,-50 L-46,-46 L-44,-40 Z" fill="#0b0a09"/>
+          <g class="ink" style="--d:700" stroke="#efe6d3" stroke-width="1.2" fill="none">
+            <path d="M-72,-50 L-42,-60 M-70,-50 L-46,-46"/>
+            <path d="M8,-62 C30,-60 50,-46 66,-24 M20,-54 c14,6 24,16 30,30 M32,-52 c12,8 20,18 24,28 M12,-42 c10,4 18,12 22,20 M46,-38 c8,8 14,16 18,26"/>
+            <path d="M72,-28 L108,6 M64,-18 L98,10 M80,-34 L116,4"/>
+            <path d="M-36,-42 c8,-2 14,-2 20,2 M-30,-50 c6,-2 10,-2 14,0"/>
+          </g>
+          <circle class="ink fillin" style="--d:800" cx="-30" cy="-66" r="3.6" fill="#efe6d3" stroke="#0b0a09" stroke-width=".8"/>
+          <circle cx="-29" cy="-66" r="1.7" fill="#0b0a09"/>
+          <path class="ink" style="--d:600" d="M-6,-26 L-8,0 M-8,0 l-13,4 M-8,0 l9,5 M6,-26 L8,0 M8,0 l-10,5 M8,0 l13,3" fill="none" stroke="#0b0a09" stroke-width="3" stroke-linecap="round"/>
+        </g>
+      </g>
+
+      <!-- feathers spawn here -->
+      <g id="feathers"></g>
+
+      <!-- vignette: cross-hatch darkening the corners of the plate -->
+      <rect class="wash" style="--d:1500" x="36" y="36" width="1328" height="828" fill="url(#pCross)" mask="url(#mVig)" opacity=".85"/>
+    </g>
+
+    <!-- lettering on the floor -->
+    <text id="word" x="700" y="842" text-anchor="middle" font-family="'Pirata One', 'IM Fell English SC', serif" font-size="112" letter-spacing="5" fill="#0b0a09" stroke="#0b0a09" stroke-width="2" paint-order="stroke">NEVERMORE</text>
+
+    <!-- plate frame -->
+    <rect class="ink" style="--d:0" x="24" y="24" width="1352" height="852" fill="none" stroke="#0b0a09" stroke-width="3"/>
+    <rect class="ink" style="--d:100" x="36" y="36" width="1328" height="828" fill="none" stroke="#0b0a09" stroke-width="1"/>
+  </svg>
+  </div>
+
+  <p id="line" aria-live="polite">Once upon a midnight dreary, while I pondered, weak and weary…</p>
+
+  <div id="deck">
+    <button class="card" data-slot="0" type="button"><svg class="frame" aria-hidden="true"><rect class="bg"/><rect class="outer"/><rect class="inner"/></svg><span class="num">I</span><span class="q"></span></button>
+    <button class="card" data-slot="1" type="button"><svg class="frame" aria-hidden="true"><rect class="bg"/><rect class="outer"/><rect class="inner"/></svg><span class="num">II</span><span class="q"></span></button>
+    <button class="card" data-slot="2" type="button"><svg class="frame" aria-hidden="true"><rect class="bg"/><rect class="outer"/><rect class="inner"/></svg><span class="num">III</span><span class="q"></span></button>
+  </div>
+
+  <div id="titleUI">
+    <p class="caption">THE RAVEN <span>·</span> EDGAR ALLAN POE <span>·</span> MDCCCXLV</p>
+    <p class="how">Every question you ask, the bird answers <em>NEVERMORE</em>. Ask only what it is a mercy never to have — before the lamp burns out.</p>
+    <p class="keys">Tap a card · keys <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> · eighteen mercies bring the dawn</p>
+    <button id="begin" type="button">Ask the Raven</button>
+    <p id="best" class="best"></p>
+  </div>
+
+  <div id="endUI" hidden>
+    <p id="endTitle" class="end-title"></p>
+    <p id="endLine" class="end-line"></p>
+    <p id="endScore" class="end-score"></p>
+    <button id="again" type="button">Ask again</button>
+  </div>
+
+  <button id="mute" type="button" aria-label="Mute" title="Mute">♪</button>
+</div>
+
+<script type="module" src="game.js"></script>

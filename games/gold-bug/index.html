@@ -1,4 +1,154 @@
-<!doctype html><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>The Gold-Bug</title>
-<!-- PLACEHOLDER. Story: The Gold-Bug (games/gold-bug/). Overwrite this file entirely. -->
-<body style="background:#0a0908;color:#e8e2d4;font:16px/1.6 system-ui;display:grid;place-items:center;height:100vh;margin:0"><p>The Gold-Bug — game pending</p>
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Gold-Bug — Kidd’s Cipher</title>
+<link rel="stylesheet" href="/shared/fonts.css">
+<link rel="stylesheet" href="/shared/poe.css">
+<link rel="stylesheet" href="style.css">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="goldGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7dc7a"/>
+      <stop offset="0.35" stop-color="#d4a017"/>
+      <stop offset="0.7" stop-color="#a97a0c"/>
+      <stop offset="1" stop-color="#6f4a06"/>
+    </linearGradient>
+    <radialGradient id="goldShine" cx="0.35" cy="0.25" r="0.6">
+      <stop offset="0" stop-color="#fff5c2" stop-opacity="0.9"/>
+      <stop offset="0.5" stop-color="#f2cf5b" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#f2cf5b" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e9e4d8"/>
+      <stop offset="0.5" stop-color="#8b8577"/>
+      <stop offset="1" stop-color="#3c3730"/>
+    </linearGradient>
+    <symbol id="bug" viewBox="-60 -80 120 160">
+      <!-- shadow -->
+      <ellipse cx="4" cy="12" rx="40" ry="52" fill="rgba(40,20,5,0.35)" transform="rotate(-8)"/>
+      <!-- legs -->
+      <g fill="none" stroke="#3a2408" stroke-width="3.2" stroke-linecap="round">
+        <path d="M -26,-22 c -14,-6 -24,-16 -28,-30 m 28,30 c -8,-14 -10,-22 -6,-34"/>
+        <path d="M 26,-22 c 14,-6 24,-16 28,-30 m -28,30 c 8,-14 10,-22 6,-34"/>
+        <path d="M -32,4 c -16,2 -28,0 -38,-10"/>
+        <path d="M 32,4 c 16,2 28,0 38,-10"/>
+        <path d="M -28,30 c -14,10 -22,24 -22,40"/>
+        <path d="M 28,30 c 14,10 22,24 22,40"/>
+        <!-- antennae -->
+        <path d="M -8,-56 c -4,-10 -12,-16 -22,-18 m 22,18 c -2,-6 -6,-10 -10,-12"/>
+        <path d="M 8,-56 c 4,-10 12,-16 22,-18 m -22,18 c 2,-6 6,-10 10,-12"/>
+      </g>
+      <!-- head -->
+      <path d="M -14,-48 c 0,-14 28,-14 28,0 c 0,8 -6,12 -14,12 c -8,0 -14,-4 -14,-12 z" fill="#5a3a08"/>
+      <!-- thorax -->
+      <path d="M -26,-32 c 0,-16 52,-16 52,0 c 0,10 -10,14 -26,14 c -16,0 -26,-4 -26,-14 z" fill="url(#goldGrad)" stroke="#5a3a08" stroke-width="1.5"/>
+      <!-- elytra -->
+      <path d="M -36,-16 c 0,-8 72,-8 72,0 c 4,40 -12,76 -36,84 c -24,-8 -40,-44 -36,-84 z" fill="url(#goldGrad)" stroke="#5a3a08" stroke-width="1.6"/>
+      <path d="M 0,-20 v 88" stroke="#5a3a08" stroke-width="1.6"/>
+      <path d="M -36,-16 c 0,-8 72,-8 72,0 c 4,40 -12,76 -36,84 c -24,-8 -40,-44 -36,-84 z" fill="url(#goldShine)"/>
+      <!-- two jet black spots near one extremity, a longer one at the other -->
+      <ellipse cx="-14" cy="-2" rx="6.5" ry="8" fill="#120c04"/>
+      <ellipse cx="14" cy="-2" rx="6.5" ry="8" fill="#120c04"/>
+      <ellipse cx="0" cy="44" rx="6" ry="16" fill="#120c04"/>
+      <!-- pin -->
+      <g transform="rotate(-22 0 -22)">
+        <path d="M 0,-26 v 78" stroke="url(#steel)" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M 0,-26 v 78" stroke="rgba(255,255,255,0.35)" stroke-width="0.8"/>
+        <circle cx="0" cy="-30" r="5.5" fill="url(#steel)" stroke="#2a2622" stroke-width="0.8"/>
+        <circle cx="-1.5" cy="-31.5" r="1.6" fill="#fff" opacity="0.7"/>
+      </g>
+    </symbol>
+    <symbol id="skull" viewBox="-70 -80 140 175">
+      <path d="M 0,-64 C -42,-64 -58,-30 -54,4 C -52,20 -40,30 -36,44 L -34,60 L 34,60 L 36,44 C 40,30 52,20 54,4 C 58,-30 42,-64 0,-64 Z" fill="currentColor"/>
+      <path d="M -33,60 L -30,80 L 30,80 L 33,60 Z" fill="currentColor"/>
+      <ellipse cx="-20" cy="2" rx="14" ry="17" fill="#000" opacity="0.85" transform="rotate(-8 -20 2)"/>
+      <ellipse cx="20" cy="2" rx="14" ry="17" fill="#000" opacity="0.85" transform="rotate(8 20 2)"/>
+      <path d="M 0,22 l -8,16 h 16 z" fill="#000" opacity="0.8"/>
+      <g stroke="#000" stroke-width="2.5" opacity="0.7"><path d="M -18,60 v 18 M -9,60 v 20 M 0,60 v 20 M 9,60 v 20 M 18,60 v 18"/></g>
+    </symbol>
+    <symbol id="spade" viewBox="-8 -12 16 24">
+      <path d="M 0,-11 v 9 M -2.5,-11 h 5 M -6,-2 c 0,6 2.5,10 6,12 c 3.5,-2 6,-6 6,-12 z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div id="stage">
+  <div id="fire" aria-hidden="true"></div>
+  <canvas id="parchment" aria-hidden="true"></canvas>
+  <canvas id="embers" aria-hidden="true"></canvas>
+  <div id="glow" aria-hidden="true"></div>
+  <svg id="skullwm" aria-hidden="true"><use href="#skull"/></svg>
+
+  <!-- ============ TITLE ============ -->
+  <section id="title" class="screen">
+    <div class="t-top">
+      <p class="t-kicker">Edgar Allan Poe · The Gold-Bug · 1843</p>
+      <h1 class="t-title"><span>KIDD’S</span><span>CIPHER</span></h1>
+    </div>
+    <div class="t-bug"><svg class="bug" aria-label="The gold bug, pinned"><use href="#bug"/></svg></div>
+    <div class="t-bottom">
+      <p class="t-line">Break Captain Kidd’s cipher and read the map before the rival with the spade finds the tree.</p>
+      <p class="t-how"><b>How to play:</b> tap a mark, then a letter. Every key word lights a landmark and drives him back.</p>
+      <button class="t-start" id="btnStart">Hold the parchment to the fire</button>
+      <p class="t-best" id="best">Best —</p>
+    </div>
+    <div class="t-note" aria-hidden="true">53‡‡†305))6*;4826)4‡.)4‡);806*;48†8¶60))85;;]8*<br>— <i>the characters, as they appeared upon the parchment</i></div>
+  </section>
+
+  <!-- ============ PLAY ============ -->
+  <section id="play" class="screen" hidden>
+    <header class="hud">
+      <div class="hud-round"><span class="hud-num" id="roundNum">I</span><span class="hud-name" id="roundName">The Island</span></div>
+      <div class="hud-time" id="hudTime"><svg class="ico"><use href="#spade"/></svg><span id="time">0:42</span></div>
+      <div class="hud-score"><span class="hud-lbl">Score</span><b id="score">0</b><span class="streak" id="streak"></span></div>
+      <div class="hud-tools">
+        <button class="tool" id="btnHint" title="Legrand’s hint (1)"><span>Hint</span><kbd>1</kbd></button>
+        <button class="tool" id="btnLens" title="Legrand’s lens (2)"><span>Lens</span><kbd>2</kbd></button>
+        <button class="tool" id="btnMute" title="Sound (3)"><span>Sound</span><kbd>3</kbd></button>
+      </div>
+    </header>
+    <div class="board">
+      <div class="left">
+        <div id="text" class="cipher-text" aria-live="polite"></div>
+        <div id="chart" class="chart" aria-label="Frequency of each mark"></div>
+        <div id="keys" class="keys" aria-label="Alphabet"></div>
+      </div>
+      <aside class="right">
+        <div id="map" class="map"></div>
+        <div id="rivalLine" class="rival-line">The rival has landed on the shore.</div>
+        <div id="notes" class="notes"></div>
+        <svg class="pinned" aria-hidden="true"><use href="#bug"/></svg>
+      </aside>
+    </div>
+    <div id="toast" class="toast" hidden></div>
+  </section>
+
+  <!-- ============ INTERLUDE ============ -->
+  <section id="interlude" class="screen" hidden>
+    <div class="card">
+      <p class="i-kicker" id="iKicker">Round II</p>
+      <h2 class="i-title" id="iTitle">The Parchment</h2>
+      <p class="i-plain" id="iPlain"></p>
+      <p class="i-body" id="iBody"></p>
+      <p class="i-bonus" id="iBonus"></p>
+      <p class="i-cue">press any key · tap to continue</p>
+    </div>
+  </section>
+
+  <!-- ============ END ============ -->
+  <section id="end" class="screen" hidden>
+    <div class="card">
+      <p class="i-kicker" id="eKicker"></p>
+      <h2 class="i-title" id="eTitle"></h2>
+      <div class="e-map" id="eMap"></div>
+      <p class="i-quote" id="eQuote"></p>
+      <p class="i-src" id="eSrc"></p>
+      <div class="e-score"><span>Score</span><b id="eScore">0</b><span id="eBest"></span></div>
+      <div class="e-stats" id="eStats"></div>
+      <button class="t-start" id="btnAgain">Dig again</button>
+    </div>
+  </section>
+</div>
+
+<script type="module" src="game.js"></script>

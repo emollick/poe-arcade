@@ -1,0 +1,289 @@
+/* THE RAVEN — "Nevermore"
+ * Black ink on cream. The lamp's flame is the only colour on the page.
+ *   plate  #efe6d3   ink #0b0a09   flame #b8902c */
+
+:root {
+  --cream: #efe6d3;
+  --ink: #0b0a09;
+  --gold: #b8902c;
+  --lamp: 1;               /* 0..1, drives the glow */
+  --deck-h: 236px;
+}
+
+html, body { background: var(--cream); color: var(--ink); }
+body { font-family: 'IM Fell English', 'EB Garamond', Georgia, serif; }
+
+#stage {
+  position: fixed; inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-areas: "hud" "plate" "line" "bottom";
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(255,250,235,.6), rgba(239,230,211,0) 70%),
+    var(--cream);
+}
+
+/* ---------- HUD ---------- */
+#hud {
+  grid-area: hud;
+  display: flex; justify-content: center; gap: 2.2em;
+  padding: 12px 64px 0;
+  font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: .22em;
+  opacity: 0; transition: opacity .6s;
+  pointer-events: none; white-space: nowrap;
+}
+#hud b { font-weight: 700; font-size: 14px; letter-spacing: .1em; }
+.is-play #hud, .is-end #hud { opacity: 1; }
+#hud .bump b { animation: bump .35s ease-out; }
+@keyframes bump { 0% { transform: scale(1.5); } 100% { transform: scale(1); } }
+#hud b { display: inline-block; }
+
+/* ---------- THE PLATE ---------- */
+#plateWrap { grid-area: plate; min-height: 0; display: flex; align-items: flex-end; justify-content: center; padding: 6px 10px 0; }
+#plate { width: 100%; height: 100%; display: block; overflow: visible; }
+
+/* draw-in: every stroke is normalised with pathLength=1 by game.js */
+.ink {
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+  animation: draw 1.3s cubic-bezier(.45,0,.2,1) forwards;
+  animation-delay: calc(var(--d, 0) * 1ms + 150ms);
+}
+.fillin {
+  fill-opacity: 0;
+  animation: draw 1.3s cubic-bezier(.45,0,.2,1) forwards, fillin .7s ease forwards;
+  animation-delay: calc(var(--d, 0) * 1ms + 150ms), calc(var(--d, 0) * 1ms + 950ms);
+}
+.wash { opacity: 0; animation: wash .9s ease forwards; animation-delay: calc(var(--d, 0) * 1ms + 700ms); }
+@keyframes draw   { to { stroke-dashoffset: 0; } }
+@keyframes fillin { to { fill-opacity: 1; } }
+@keyframes wash   { to { opacity: 1; } }
+/* the vignette rect is the only .wash with its own opacity */
+#scene > rect[mask] { animation-name: washVig; }
+@keyframes washVig { to { opacity: .85; } }
+
+.rm .ink, .rm .fillin, .rm .wash { animation: none !important; stroke-dashoffset: 0; fill-opacity: 1; opacity: 1; }
+.rm #scene > rect[mask] { opacity: .85; }
+
+/* the raven */
+#raven { transform-box: view-box; transform: translate(700px, 138px); transition: none; }
+#ravenBody { transform-box: fill-box; transform-origin: 50% 100%; }
+#ravenBody.croak { animation: hunch .5s cubic-bezier(.3,0,.2,1); }
+@keyframes hunch {
+  0% { transform: scale(1,1); } 25% { transform: scale(1.06,.9) translateY(2px); }
+  55% { transform: scale(.98,1.06) translateY(-4px); } 100% { transform: scale(1,1); }
+}
+#beakLow { transform-box: fill-box; transform-origin: 93% 40%; transition: transform .1s; }
+#ravenBody.croak #beakLow { animation: beak .5s; }
+@keyframes beak { 20%, 60% { transform: rotate(14deg); } 100% { transform: rotate(0); } }
+#wingUp { transform-box: fill-box; transform-origin: 0% 100%; opacity: 0; }
+.flap #wingUp { opacity: 1; animation: flap .22s ease-in-out 4 alternate; }
+@keyframes flap { from { transform: scaleY(1); } to { transform: scaleY(-.45); } }
+#raven.idle { animation: idle 5.5s ease-in-out infinite; }
+@keyframes idle { 0%, 88%, 100% { transform: translate(700px, 138px) rotate(0); } 92% { transform: translate(700px, 138px) rotate(-2deg); } 96% { transform: translate(700px, 138px) rotate(1.2deg); } }
+/* takeoff at dawn */
+#raven.fly { animation: none; transition: transform 2.8s cubic-bezier(.45,0,.7,.35), opacity .6s 2.4s; transform: translate(1170px, 420px) scale(.5, .5); opacity: 0; }
+#raven.fly #wingUp { opacity: 1; animation: flap .16s ease-in-out infinite alternate; }
+
+/* feathers */
+#feathers use { transform-box: view-box; fill: var(--ink); opacity: 0; animation: fall 2.6s cubic-bezier(.3,.2,.6,1) forwards; }
+@keyframes fall {
+  0%   { opacity: 1; transform: translate(var(--fx), var(--fy)) rotate(10deg); }
+  30%  { transform: translate(calc(var(--fx) - 30px), calc(var(--fy) + 70px)) rotate(-40deg); }
+  60%  { transform: translate(calc(var(--fx) + 20px), calc(var(--fy) + 150px)) rotate(35deg); }
+  100% { opacity: 0; transform: translate(calc(var(--fx) - 10px), calc(var(--fy) + 240px)) rotate(-20deg); }
+}
+#feathers use.scatter { animation: scatter 2.2s ease-out forwards; }
+@keyframes scatter {
+  0%   { opacity: 1; transform: translate(var(--fx), var(--fy)) rotate(0); }
+  100% { opacity: 0; transform: translate(calc(var(--fx) + var(--sx)), calc(var(--fy) + var(--sy))) rotate(var(--sr)); }
+}
+
+/* the lamp: the flame is the clock */
+#flame { transform-box: fill-box; transform-origin: 50% 100%; transform: scaleY(1); }
+#flame.gutter { animation: gutter .25s linear infinite; }
+@keyframes gutter { 0%,100% { opacity: 1; } 40% { opacity: .55; } 70% { opacity: .9; } }
+#glow { mix-blend-mode: multiply; opacity: calc(.15 + var(--lamp) * .55); transition: opacity 1s; }
+
+/* the shadow */
+#shadow { transform-box: fill-box; transform-origin: 100% 45%; transform: translate(0,0) scale(1,1); transition: transform 1s cubic-bezier(.25,.7,.2,1); }
+#shroud { transition: opacity 2.6s ease-in; }
+#wallHatch, #scene > rect[mask] { transition: opacity 3.5s ease; }
+.dawn #wallHatch { opacity: .3 !important; }
+.dawn #scene > rect[mask] { opacity: .25 !important; }
+.dawn #glow { opacity: 0; }
+
+/* curtain */
+#drape { transform-box: fill-box; transform-origin: 50% 0; animation: sway 7s ease-in-out infinite; }
+@keyframes sway { 0%,100% { transform: skewX(0); } 40% { transform: skewX(1.4deg); } 70% { transform: skewX(-.9deg); } }
+#drape.rustle { animation: rustle 1.4s ease-in-out; }
+@keyframes rustle { 0%,100% { transform: skewX(0); } 20% { transform: skewX(4deg); } 45% { transform: skewX(-3deg); } 70% { transform: skewX(2deg); } }
+
+/* window at dawn */
+#night { transition: opacity 4s ease; }
+#dawn { transition: opacity 4s ease; }
+.dawn #night { opacity: .06 !important; }
+.dawn #dawn { opacity: 1; }
+
+/* narrator trembles */
+#narrator { transform-box: fill-box; transform-origin: 50% 100%; }
+#narrator.tremble { animation: tremble .55s; }
+@keyframes tremble { 0%,100% { transform: translate(0,0); } 20% { transform: translate(-3px,1px) rotate(-.6deg); } 40% { transform: translate(3px,-1px); } 60% { transform: translate(-2px,0) rotate(.5deg); } 80% { transform: translate(2px,1px); } }
+
+/* lettering */
+#word { font-size: 112px; stroke-dasharray: 700; stroke-dashoffset: 700; fill-opacity: 0; }
+.is-title #word { animation: wordDraw 1.6s ease-out forwards; animation-delay: 2.2s; }
+#word.croak { animation: wordDraw .8s cubic-bezier(.2,.6,.3,1) forwards; }
+#word.gone { animation: wordFade .5s ease forwards; }
+@keyframes wordDraw { 0% { stroke-dashoffset: 700; fill-opacity: 0; opacity: 1; } 55% { fill-opacity: 0; } 100% { stroke-dashoffset: 0; fill-opacity: 1; opacity: 1; } }
+@keyframes wordFade { to { opacity: 0; } }
+.rm #word { animation: none !important; opacity: 1; stroke-dashoffset: 0; fill-opacity: 1; }
+.rm.is-play #word:not(.croak) { opacity: 0; }
+
+/* ---------- THE NARRATOR'S LINE ---------- */
+#line {
+  grid-area: line;
+  margin: 0; padding: 6px 18px 4px;
+  text-align: center; font-style: italic; font-size: clamp(15px, 1.45vw, 20px); line-height: 1.3;
+  min-height: 2.4em; display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .4s;
+}
+.is-play #line { opacity: 1; }
+#line.tremble { animation: lineTremble .5s; }
+@keyframes lineTremble { 0%,100% { transform: translate(0); } 25% { transform: translate(-4px,1px); } 50% { transform: translate(4px,-1px); } 75% { transform: translate(-2px,0); } }
+#line.hint { font-style: normal; font-family: 'IM Fell English SC', serif; letter-spacing: .04em; }
+
+/* ---------- THE DECK ---------- */
+#deck {
+  grid-area: bottom;
+  position: relative; height: var(--deck-h);
+  display: none;
+}
+.is-play #deck { display: block; }
+
+.card {
+  position: absolute; left: 50%; top: 50%;
+  width: min(370px, 30vw); height: 156px;
+  margin: 0; padding: 26px 30px 20px;
+  background: transparent; color: var(--ink); border: 0; cursor: pointer;
+  font-family: 'IM Fell English SC', 'IM Fell English', serif; font-size: clamp(16px, 1.5vw, 21px); line-height: 1.22;
+  text-align: center;
+  --x: 0px; --y: 0px; --r: 0deg;
+  transform: translate(-50%, -50%) translate(var(--x), var(--y)) rotate(var(--r));
+  transition: transform .45s cubic-bezier(.2,.7,.2,1), opacity .4s;
+  touch-action: manipulation; -webkit-user-select: none; user-select: none;
+  filter: drop-shadow(0 0 0 transparent);
+}
+.card[data-slot="0"] { --x: -110%; --y: 12px; --r: -3.5deg; }
+.card[data-slot="1"] { --x: 0px;    --y: 0px;  --r: 0deg; }
+.card[data-slot="2"] { --x: 110%;   --y: 12px; --r: 3.5deg; }
+.card::before {                   /* hatched cast shadow, the engraver's way */
+  content: ""; position: absolute; inset: 6px -7px -7px 6px; z-index: -1;
+  background: repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 5px);
+  opacity: .7;
+}
+.card .frame { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.card .frame rect { fill: none; stroke: var(--ink); }
+.card .frame rect.bg { fill: var(--cream); stroke: none; }
+.card.picked.ruin .frame rect.bg { fill: var(--ink); }
+.card .frame rect:first-child { stroke-width: 2px; }
+.card .frame rect:last-child  { stroke-width: 1px; }
+.card.dealt .frame rect:not(.bg) { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw .5s ease-out forwards; }
+.card.dealt .frame rect:last-child { animation-delay: .12s; }
+.card .num { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: .3em; opacity: .6; }
+.card .q { display: block; position: relative; }
+.card:hover, .card:focus-visible { transform: translate(-50%, -50%) translate(var(--x), calc(var(--y) - 10px)) rotate(var(--r)); }
+.card.dim { opacity: .25; pointer-events: none; }
+.card.picked { z-index: 2; pointer-events: none; transform: translate(-50%, -50%) translate(var(--x), calc(var(--y) - 18px)) rotate(0deg) scale(1.04); }
+.card.picked.safe .frame rect:first-child { stroke: var(--gold); stroke-width: 3px; }
+.card.picked.ruin { color: var(--cream); }
+.card.picked.ruin .frame rect { stroke: var(--cream); }
+.card.picked.ruin::before { opacity: 1; }
+.card.byRaven .num::after { content: " · THE RAVEN CHOSE"; letter-spacing: .12em; }
+.card.swapping { transition-duration: .7s; }
+.card:disabled { cursor: default; }
+
+/* ---------- TITLE + END PANELS ---------- */
+#titleUI, #endUI {
+  grid-area: bottom;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 10px 24px calc(12px + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+}
+#titleUI { display: none; opacity: 0; animation: wash .9s ease 2.6s forwards; }
+.is-title #titleUI { display: flex; }
+.rm #titleUI { animation: none; opacity: 1; }
+.caption { margin: 0 0 2px; font-family: 'Cinzel', serif; font-weight: 700; font-size: 15px; letter-spacing: .36em; }
+.caption span { opacity: .5; font-weight: 400; }
+.how { margin: 0; font-size: clamp(15px, 1.35vw, 19px); font-style: italic; max-width: 62ch; line-height: 1.35; }
+.how em { font-style: normal; font-family: 'Pirata One', serif; font-size: 1.15em; letter-spacing: .04em; }
+.keys { margin: 0; font-family: 'Cinzel', serif; font-size: 11.5px; letter-spacing: .18em; opacity: .75; }
+kbd { font-family: 'Cinzel', serif; border: 1px solid var(--ink); padding: 0 5px; border-radius: 2px; font-size: 11px; }
+.best { margin: 0; font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: .16em; min-height: 1.2em; }
+
+#begin, #again {
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 15px; letter-spacing: .24em; text-transform: uppercase;
+  color: var(--ink); background: var(--cream); cursor: pointer; margin-top: 4px;
+  padding: 12px 30px; border: 2px solid var(--ink); box-shadow: inset 0 0 0 3px var(--cream), inset 0 0 0 4px var(--ink);
+  transition: background .2s, color .2s, transform .2s;
+}
+#begin:hover, #again:hover, #begin:focus-visible, #again:focus-visible { background: var(--ink); color: var(--cream); box-shadow: inset 0 0 0 3px var(--ink), inset 0 0 0 4px var(--cream); }
+#begin:active, #again:active { transform: translateY(2px); }
+
+#endUI[hidden] { display: none; }
+#endUI { position: relative; z-index: 3; animation: wash .8s ease forwards; }
+.end-title { margin: 0; font-family: 'Cinzel', serif; font-size: 13px; letter-spacing: .34em; }
+.end-line { margin: 0; font-style: italic; font-size: clamp(16px, 1.6vw, 22px); max-width: 60ch; line-height: 1.3; }
+.end-score { margin: 0; font-family: 'Cinzel', serif; font-size: 12px; letter-spacing: .2em; }
+.end-score b { font-size: 20px; letter-spacing: .06em; }
+
+#mute {
+  position: fixed; z-index: 5; top: calc(env(safe-area-inset-top, 0px) + 12px); right: calc(env(safe-area-inset-right, 0px) + 12px);
+  width: 40px; height: 40px; border: 1.5px solid var(--ink); border-radius: 50%; background: var(--cream); color: var(--ink);
+  font: 18px 'IM Fell English', serif; cursor: pointer; opacity: .6;
+}
+#mute:hover { opacity: 1; }
+#mute.off { text-decoration: line-through; opacity: .45; }
+
+/* ---------- PORTRAIT PHONE ---------- */
+@media (max-aspect-ratio: 5/6) {
+  :root { --deck-h: auto; }
+  #stage { grid-template-rows: auto minmax(0, 1fr) auto auto; }
+  #hud { padding: 56px 12px 0; gap: 1.3em; font-size: 10.5px; }
+  #hud b { font-size: 12px; }
+  #plateWrap { padding: 4px 0 0; }
+  #line { font-size: 15px; min-height: 2.6em; padding: 4px 14px; }
+  #deck { height: auto; display: none; flex-direction: column; gap: 10px; padding: 4px 14px calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .is-play #deck { display: flex; }
+  .card {
+    position: relative; left: auto; top: auto; width: 100%; height: 68px;
+    padding: 12px 16px 8px 40px; font-size: 15.5px; line-height: 1.18;
+    transform: none !important;
+    --x: 0px; --y: 0px; --r: 0deg;
+    transition: opacity .4s, order 0s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card[data-slot="0"] { order: 0; } .card[data-slot="1"] { order: 1; } .card[data-slot="2"] { order: 2; }
+  .card .num { top: 50%; left: 12px; transform: translateY(-50%); writing-mode: vertical-rl; letter-spacing: .2em; }
+  .card.byRaven .num::after { content: " · RAVEN"; }
+  .card.picked { transform: none !important; }
+  .card::before { inset: 5px -5px -5px 5px; }
+  #titleUI, #endUI { padding: 6px 16px calc(14px + env(safe-area-inset-bottom, 0px)); gap: 7px; }
+  .how { font-size: 14.5px; }
+  .caption { font-size: 12px; letter-spacing: .28em; }
+  .keys { font-size: 10px; }
+  #begin, #again { font-size: 13px; padding: 11px 22px; }
+  .end-line { font-size: 15.5px; }
+}
+
+/* short landscape (phones rotated): shrink the deck */
+@media (max-height: 520px) and (min-aspect-ratio: 5/6) {
+  :root { --deck-h: 150px; }
+  .card { height: 110px; padding: 20px 16px 10px; font-size: 14px; }
+  #line { min-height: 1.6em; padding: 2px 10px; font-size: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #drape, #raven.idle, .card.dealt .frame rect { animation: none !important; }
+  .card.dealt .frame rect { stroke-dashoffset: 0 !important; }
+}

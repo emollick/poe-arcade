@@ -1,4 +1,79 @@
-<!doctype html><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>A Descent into the Maelström</title>
-<!-- PLACEHOLDER. Story: A Descent into the Maelström (games/maelstrom/). Overwrite this file entirely. -->
-<body style="background:#0a0908;color:#e8e2d4;font:16px/1.6 system-ui;display:grid;place-items:center;height:100vh;margin:0"><p>A Descent into the Maelström — game pending</p>
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Vortex — A Descent into the Maelström</title>
+<link rel="stylesheet" href="/shared/fonts.css">
+<link rel="stylesheet" href="/shared/poe.css">
+<link rel="stylesheet" href="./style.css">
+
+<canvas id="gl" aria-label="The whirlpool"></canvas>
+<div id="flash" class="flash"></div>
+
+<div id="ui">
+  <!-- title -->
+  <section id="title" class="screen">
+    <svg id="titleSvg" aria-hidden="true">
+      <defs>
+        <filter id="glow" x="-20%" y="-60%" width="140%" height="220%">
+          <feGaussianBlur stdDeviation="6" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <path id="rimPath" d="M0 0" fill="none"/>
+      <text id="rimText" class="rim-title" text-anchor="middle" filter="url(#glow)">
+        <textPath href="#rimPath" startOffset="50%">The Vortex</textPath>
+      </text>
+    </svg>
+    <h1 id="stacked" class="stacked" hidden>The Vortex</h1>
+    <div class="title-block">
+      <p class="over">Edgar Allan Poe · <em>A Descent into the Maelström</em></p>
+      <p class="howto">
+        Swim <kbd>←</kbd><kbd>→</kbd> around the wall, climb <kbd>↑</kbd>, <kbd>space</kbd> lash to whatever floats near.
+        <strong>Cylinders rise. Everything else plunges.</strong> Hold on until the tide turns.
+      </p>
+      <button id="start" type="button">Go down into the water</button>
+      <p id="best" class="best">no one has yet come up out of it</p>
+    </div>
+  </section>
+
+  <!-- hud -->
+  <section id="hud" hidden>
+    <div class="hud-top">
+      <div id="tide" class="tide">tide turns in 1:20</div>
+      <div class="score-wrap"><span id="score" class="score">0</span><span id="mult" class="mult">×1 adrift</span></div>
+    </div>
+    <div class="depth" aria-hidden="true">
+      <div class="depth-track"><div id="depthFill" class="depth-fill"></div><div id="depthMark" class="depth-mark"></div></div>
+      <span class="depth-lbl top">rim</span><span class="depth-lbl bot">the gulf</span>
+    </div>
+    <div class="stam" aria-hidden="true"><div id="stamFill" class="stam-fill"></div><span>breath</span></div>
+    <div id="prompt" class="prompt" hidden></div>
+    <div id="toast" class="toast"></div>
+  </section>
+
+  <!-- touch controls -->
+  <div id="touch" hidden>
+    <div class="pad left">
+      <button id="btnLeft" type="button" aria-label="swim left">‹</button>
+      <button id="btnUp" type="button" aria-label="climb">↑</button>
+      <button id="btnRight" type="button" aria-label="swim right">›</button>
+    </div>
+    <button id="btnLash" type="button" class="lash-btn">lash</button>
+  </div>
+
+  <!-- end -->
+  <section id="end" class="screen" hidden>
+    <div class="end-block">
+      <p id="endKicker" class="over"></p>
+      <p id="endQuote" class="quote"></p>
+      <p class="end-score"><span id="endScore">0</span></p>
+      <p id="endStats" class="end-stats"></p>
+      <button id="again" type="button">Go down again</button>
+    </div>
+  </section>
+
+  <button id="mute" type="button" class="mute">sound on</button>
+  <div id="nogl" class="screen" hidden><p class="quote">This water needs WebGL2, and your browser has none.</p></div>
+</div>
+
+<script type="module" src="./game.js"></script>
