@@ -119,3 +119,20 @@ Published 2026-09-06:
 | Brick by Brick — The Cask of Amontillado | https://claude.ai/code/artifact/7f96db88-bf30-4787-a80d-9004177baaaf |
 | Nevermore — The Raven | https://claude.ai/code/artifact/d1b1f4c6-8797-4fa6-b5e0-bfdc488e4fb1 |
 | Pluto — The Black Cat | https://claude.ai/code/artifact/5db7d530-053d-4674-b31d-1f81995f5345 |
+
+## GitHub
+
+The source lives at https://github.com/emollick/poe-arcade (default branch
+`main`). Push there with `git push origin main`; the remote is configured
+as `origin` and `main` tracks `origin/main`.
+
+To have Netlify build from the repository instead of manual bundle uploads:
+
+1. Open the site in Netlify → Site configuration → Build & deploy →
+   Continuous deployment → Link repository.
+2. Choose GitHub, authorize if prompted, and pick `emollick/poe-arcade`.
+3. Branch to deploy: `main`. Build command: leave empty (the site is static).
+   Publish directory: `.` (the repository root).
+4. Save. `netlify.toml` already declares the publish directory and the
+   response headers, so no further build settings are needed; every push
+   to `main` then produces a production deploy.
