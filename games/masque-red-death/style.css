@@ -175,21 +175,15 @@ html, body { background: var(--velvet); color: var(--bone); }
   min-height: 1.4em;
   text-shadow: 0 1px 6px rgba(0,0,0,0.9);
 }
-.fine {
-  margin: 0;
-  font-size: clamp(14px, 1.2vw, 17px);
-  font-style: italic;
-  color: rgba(241, 232, 211, 0.55);
-  text-shadow: 0 1px 6px rgba(0,0,0,0.9);
-}
-
 #end { background: radial-gradient(ellipse at center, rgba(7,4,10,0.35) 0%, rgba(7,4,10,0.85) 100%); }
 #end h2 {
   margin: 0;
+  display: flex; flex-direction: column; align-items: center;
+  max-width: 12ch;
   font-family: 'Cinzel Decorative', 'Cinzel', serif;
   font-weight: 700;
-  font-size: clamp(36px, 7vw, 92px);
-  line-height: 1;
+  font-size: clamp(32px, 5.2vw, 76px);
+  line-height: 1.05;
   letter-spacing: 0.08em;
   color: var(--bone);
   text-shadow: 0 0 30px rgba(255,31,31,0.6), 0 6px 20px rgba(0,0,0,0.95);

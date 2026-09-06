@@ -18,7 +18,8 @@ const COARSE = matchMedia('(pointer: coarse)').matches;
 const PHONE = Math.min(innerWidth, innerHeight) < 720;
 const PORTRAIT = innerHeight > innerWidth;
 const NARROW = PHONE && PORTRAIT;
-const DPR = PHONE ? 1 : Math.min(devicePixelRatio || 1, 2);
+const DPR = Math.min(devicePixelRatio || 1, 2);
+const PLAY_RES = PHONE ? 0.75 : 1;   // phones render the run at 3/4 resolution; title and end frames at full
 
 /* ------------------------------------------------------------------ world */
 const W = NARROW ? 7 : 10;       // corridor width
@@ -33,6 +34,8 @@ const ROOMS = 7;
 const STRIKES_TO_WIN = 12;
 const FIRST_STRIKE = 8;          // seconds of play before the first stroke is due
 const STRIKE_INTERVAL = 13;
+const DASH_T = 0.28;             // seconds of sidestep
+const DASH_V = 22;               // sidestep speed (strafe is 7.5)
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV'];
 
 const CHAMBERS = [
@@ -56,8 +59,8 @@ const ui = { title: $('title'), hud: $('hud'), end: $('end'), how: $('how'), bes
   floats: $('floats'), endKicker: $('endKicker'), endTitle: $('endTitle'), endQuote: $('endQuote'), endScore: $('endScore') };
 
 ui.how.innerHTML = COARSE
-  ? 'Hold the <b>left</b> or <b>right</b> of the screen to sidestep, <b>double-tap</b> to dash. When the clock strikes, slip past him and reach the next door before the last chime.'
-  : '<b>&larr; &rarr;</b> sidestep &middot; <b>W</b> hurry, <b>S</b> hang back &middot; <b>space</b> dash. When the clock strikes, slip past him and reach the next door before the last chime.';
+  ? 'Hold the <b>left</b> or <b>right</b> of the screen to sidestep, <b>double-tap</b> to dash sideways. When the clock strikes, slip past him and reach the next door before the last chime.<br>He follows you as he comes; you cannot outrun him, only slip past.'
+  : '<b>&larr; &rarr;</b> sidestep &middot; <b>W</b> hurry, <b>S</b> hang back &middot; <b>space</b> dash sideways. When the clock strikes, slip past him and reach the next door before the last chime.<br>He follows you as he comes; you cannot outrun him, only slip past.';
 
 function fmt(n) { return n.toLocaleString('en-US'); }
 function showBest() {
@@ -161,6 +164,40 @@ const shroudTex = canvasTex(256, 256, (g, w, h) => {
     g.beginPath(); g.ellipse(x, y, 0.6 + Math.random() * 3, 0.6 + Math.random() * 5, Math.random() * 3, 0, Math.PI * 2); g.fill();
   }
 }, { wrap: true });
+// walls: a panelled dado, its rail, faint damask striping and a lozenge frieze, drawn once in greys and
+// multiplied by each chamber's hue. u runs the length of the room (L), v its height (H).
+const wallTex = canvasTex(1536, 512, (g, w, h) => {
+  const px = w / L, py = h / H;                       // canvas pixels per world unit
+  const Y = (y) => h - y * py;                        // world height -> canvas row
+  g.fillStyle = '#e4e4e4'; g.fillRect(0, 0, w, h);
+  // damask striping on the upper wall
+  for (let x = 0; x < w; x += px * 0.5) { g.fillStyle = (Math.round(x / (px * 0.5)) % 2) ? '#dcdcdc' : '#e6e6e6'; g.fillRect(x, 0, px * 0.5 + 1, h); }
+  // frieze band under the vault, a run of lozenges
+  const fTop = Y(7.35), fBot = Y(6.65);
+  g.fillStyle = '#cfcfcf'; g.fillRect(0, fTop, w, fBot - fTop);
+  g.fillStyle = '#f4f4f4'; g.fillRect(0, fTop, w, 3); g.fillRect(0, fBot - 3, w, 3);
+  g.fillStyle = '#9a9a9a'; g.fillRect(0, fTop + 3, w, 2); g.fillRect(0, fBot - 5, w, 2);
+  const fm = (fTop + fBot) / 2, fr = (fBot - fTop) * 0.3;
+  for (let x = px * 0.6; x < w; x += px * 1.2) {
+    g.fillStyle = '#f0f0f0';
+    g.beginPath(); g.moveTo(x, fm - fr); g.lineTo(x + fr * 0.7, fm); g.lineTo(x, fm + fr); g.lineTo(x - fr * 0.7, fm); g.closePath(); g.fill();
+    g.fillStyle = '#b4b4b4'; g.beginPath(); g.arc(x, fm, fr * 0.28, 0, Math.PI * 2); g.fill();
+  }
+  // dado: raised panels under a rail
+  const rail = Y(2.75);
+  g.fillStyle = '#c4c4c4'; g.fillRect(0, rail, w, h - rail);
+  const pw = px * 2.2, gap = px * 0.55, pTop = Y(2.45), pBot = Y(0.75);
+  for (let x = gap; x + pw < w + 1; x += pw + gap) {
+    g.fillStyle = '#d2d2d2'; g.fillRect(x, pTop, pw, pBot - pTop);
+    g.fillStyle = '#f2f2f2'; g.fillRect(x, pTop, pw, 3); g.fillRect(x, pTop, 3, pBot - pTop);          // lit edges
+    g.fillStyle = '#8e8e8e'; g.fillRect(x, pBot - 3, pw, 3); g.fillRect(x + pw - 3, pTop, 3, pBot - pTop); // shadowed edges
+    g.fillStyle = '#c9c9c9'; g.fillRect(x + 10, pTop + 10, pw - 20, pBot - pTop - 20);
+  }
+  g.fillStyle = '#f6f6f6'; g.fillRect(0, rail - 5, w, 6);      // the rail catches the light
+  g.fillStyle = '#7e7e7e'; g.fillRect(0, rail + 1, w, 3);      // and throws a shadow
+  g.fillStyle = '#9c9c9c'; g.fillRect(0, Y(0.62), w, 2);       // skirting line
+}, { wrap: true, aniso: PHONE ? 2 : 4 });
+const endWallTex = wallTex.clone(); endWallTex.repeat.set(1 / L, 1 / H); endWallTex.needsUpdate = true;
 const dialTex = canvasTex(128, 128, (g, w, h) => {
   g.fillStyle = '#0a0506'; g.fillRect(0, 0, w, h);
   const c = w / 2;
@@ -175,7 +212,6 @@ const dialTex = canvasTex(128, 128, (g, w, h) => {
 
 /* ------------------------------------------------------------------ renderer & scene */
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !PHONE, powerPreference: 'high-performance' });
-renderer.setPixelRatio(DPR);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -193,13 +229,18 @@ const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), PH
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
+let resScale = 1, debugRes = 1;
 function resize() {
   const w = innerWidth, h = innerHeight;
+  const pr = DPR * resScale * debugRes;
+  renderer.setPixelRatio(pr);
+  composer.setPixelRatio(pr);   // the composer caches the ratio at construction; keep its targets in step
   renderer.setSize(w, h, false);
   composer.setSize(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
+function setResolution(s) { if (s !== resScale) { resScale = s; resize(); } }
 addEventListener('resize', resize, { passive: true });
 addEventListener('orientationchange', resize, { passive: true });
 resize();
@@ -283,13 +324,14 @@ class Room {
     this.index = t;
 
     const wallColor = spec.black ? new THREE.Color(0x0e080b) : hue.clone().lerp(new THREE.Color(0x777777), 0.3).multiplyScalar(0.5);
-    const wallMat = new THREE.MeshLambertMaterial({ color: wallColor });
+    const wallMat = new THREE.MeshLambertMaterial({ color: spec.black ? wallColor.clone().multiplyScalar(1.5) : wallColor.clone().multiplyScalar(1.18), map: wallTex });
+    const endMat = new THREE.MeshLambertMaterial({ color: wallMat.color, map: endWallTex });
     const ceilMat = new THREE.MeshLambertMaterial({ color: wallColor.clone().multiplyScalar(0.55) });
     const decorMat = new THREE.MeshLambertMaterial({ color: spec.black ? 0x120a0e : wallColor.clone().multiplyScalar(1.35) });
     g.add(new THREE.Mesh(floorGeo, floorMat));
     g.add(new THREE.Mesh(ceilGeo, ceilMat));
     g.add(new THREE.Mesh(wallGeoL, wallMat), new THREE.Mesh(wallGeoR, wallMat));
-    const endWall = new THREE.Mesh(endWallGeo, wallMat); endWall.position.z = -L; g.add(endWall);
+    const endWall = new THREE.Mesh(endWallGeo, endMat); endWall.position.z = -L; g.add(endWall);
     const trim = new THREE.Mesh(trimGeo, new THREE.MeshBasicMaterial({ color: hue.clone().multiplyScalar(spec.white ? 0.9 : 0.75) }));
     trim.position.z = -L + 0.05; g.add(trim);
     g.add(new THREE.Mesh(decorGeo, decorMat));
@@ -534,7 +576,7 @@ let uiTimer = 0;
 let lastTap = 0;
 let debug = { godmode: false };
 
-const player = { x: 0, z: -22, vx: 0, speed: 0, base: 10, dash: 0, dashCd: 0, grace: 1, brushCd: 0, stride: 0, doorBump: false };
+const player = { x: 0, z: -22, vx: 0, speed: 0, base: 10, dash: 0, dashDir: 0, lastDir: 1, dashCd: 0, grace: 1, brushCd: 0, stride: 0, doorBump: false };
 const run = { score: 0, chambers: 0, streak: 0, strikes: 0, curIdx: 0, nextStrike: FIRST_STRIKE, strike: null, warp: 0, playTime: 0, best: 0 };
 
 function roomOfIndex(i) { return rooms[((i % ROOMS) + ROOMS) % ROOMS]; }
@@ -562,11 +604,12 @@ function addScore(n) { run.score += n; ui.score.textContent = fmt(run.score); }
 
 function resetRun() {
   for (let t = 0; t < ROOMS; t++) rooms[t].setIndex(t);
-  player.x = 0; player.z = -22; player.vx = 0; player.speed = 0; player.dash = 0; player.dashCd = 0; player.grace = 1; player.brushCd = 0; player.doorBump = false;
-  run.score = 0; run.chambers = 0; run.streak = 0; run.strikes = 0; run.curIdx = 0; run.nextStrike = FIRST_STRIKE; run.strike = null; run.warp = 0; run.playTime = 0;
+  player.x = 0; player.z = -22; player.vx = 0; player.speed = 0; player.dash = 0; player.dashDir = 0; player.lastDir = 1; player.dashCd = 0; player.grace = 1; player.brushCd = 0; player.doorBump = false;
+  // every timer here is relative to `time`, the clock that has been running since page load
+  run.score = 0; run.chambers = 0; run.streak = 0; run.strikes = 0; run.curIdx = 0; run.nextStrike = time + FIRST_STRIKE; run.strike = null; run.warp = 0; run.playTime = 0;
   for (const r of rooms) r.spawnRevelers(0);
   rd.hide();
-  danceT = 0;
+  danceT = 0; danceFrozen = false;   // a death mid-stroke left the revel frozen for the next run
   fogTarget = new THREE.Color(CHAMBERS[0].hue);
   ui.score.textContent = '0'; ui.streak.textContent = '';
   ui.strikeNum.textContent = 'Stroke I';
@@ -586,6 +629,7 @@ function startRun() {
   audio.setWarp(0);
   audio.startMusic();
   ui.title.hidden = true; ui.end.hidden = true; ui.hud.hidden = false;
+  setResolution(PLAY_RES);
   fogDensityTarget = 0.022;
   fovTarget = NARROW ? 84 : 72;
   uiTimer = 0;
@@ -626,7 +670,7 @@ function showEnd() {
   const won = mode === 'won';
   ui.end.classList.toggle('won', won);
   ui.endKicker.textContent = won ? 'Midnight' : 'The Red Death';
-  ui.endTitle.textContent = won ? 'The Clock Falls Silent' : 'Dominion';
+  ui.endTitle.innerHTML = won ? '<span>The Clock</span><span>Falls Silent</span>' : '<span>Dominion</span>';
   ui.endQuote.textContent = won
     ? '“And the life of the ebony clock went out with that of the last of the gay; and the flames of the tripods expired.”'
     : '“And Darkness and Decay and the Red Death held illimitable dominion over all.”';
@@ -634,6 +678,7 @@ function showEnd() {
   ui.endScore.innerHTML = `<b>${fmt(run.score)}</b> · ${ROMAN[run.strikes - 1] || 'no'} stroke${run.strikes === 1 ? '' : 's'} survived · ${run.chambers} chambers${run.score >= (b.score || 0) && run.score > 0 ? ' · <b>a new best</b>' : ''}`;
   ui.hud.hidden = true;
   ui.end.hidden = false;
+  setResolution(1);
 }
 
 /* ------------------------------------------------------------------ the strike */
@@ -643,7 +688,8 @@ function beginStrike(room) {
   const spacing = Math.max(0.78, 1.9 - 0.08 * k);
   // snapshot the geometry: the Room object is recycled ahead once the player leaves it
   run.strike = { k, count, spacing, elapsed: 0, rung: 0, zStart: room.zStart, zEnd: room.zEnd, revelers: room.revelers.slice(), passedDoor: false, brushedHim: false, done: false };
-  rd.appear(0, room.zEnd + 1.0, (NARROW ? 3.6 : 4.2) + 0.5 * k, (NARROW ? 1.3 : 1.6) + 0.26 * k);
+  // he walks faster and, above all, follows you harder each stroke: by VI a plain strafe no longer clears him
+  rd.appear(0, room.zEnd + 1.0, (NARROW ? 3.6 : 4.2) + 0.5 * k, (NARROW ? 1.0 : 1.2) + (NARROW ? 0.42 : 0.5) * k);
   danceFrozen = true;
   audio.duck(true);
   audio.setWarp(0);
@@ -712,9 +758,17 @@ function updateStrike(dt) {
 }
 
 /* ------------------------------------------------------------------ input */
+function inputDir() {
+  let dir = 0;
+  if (keys.left) dir -= 1; if (keys.right) dir += 1;
+  for (const s of touches.values()) dir += s;
+  return THREE.MathUtils.clamp(dir, -1, 1);
+}
+// the one special move: a sidestep, not a sprint — he tracks you, so the only way past is sideways
 function dash() {
   if (mode !== 'play' || player.dashCd > 0) return;
-  player.dash = 0.28; player.dashCd = 1.35;
+  player.dashDir = inputDir() || player.lastDir;
+  player.dash = DASH_T; player.dashCd = 1.35;
   audio.dash();
 }
 addEventListener('keydown', (e) => {
@@ -741,10 +795,10 @@ addEventListener('pointerdown', (e) => {
   if (e.target.closest('a, button')) return;
   if (mode === 'title') { startRun(); return; }
   if (mode !== 'play') { if (uiTimer <= 0 && !ui.end.hidden) startRun(); return; }
+  touches.set(e.pointerId, e.clientX < innerWidth / 2 ? -1 : 1);
   const now = performance.now();
   if (now - lastTap < 320) dash();
   lastTap = now;
-  touches.set(e.pointerId, e.clientX < innerWidth / 2 ? -1 : 1);
 });
 const release = (e) => touches.delete(e.pointerId);
 addEventListener('pointerup', release); addEventListener('pointercancel', release);
@@ -755,12 +809,11 @@ addEventListener('blur', () => { keys.left = keys.right = keys.up = keys.down = 
 
 /* ------------------------------------------------------------------ player */
 function updatePlayer(dt) {
-  let dir = 0;
-  if (keys.left) dir -= 1; if (keys.right) dir += 1;
-  for (const s of touches.values()) dir += s;
-  dir = THREE.MathUtils.clamp(dir, -1, 1);
+  const dir = inputDir();
+  if (dir) player.lastDir = dir;
   const strafe = NARROW ? 6.5 : 7.5;
-  player.vx += (dir * strafe - player.vx) * Math.min(1, dt * 16);
+  if (player.dash > 0) { player.vx = player.dashDir * DASH_V; player.dash -= dt; }
+  else player.vx += (dir * strafe - player.vx) * Math.min(1, dt * 16);
   player.x += player.vx * dt;
   if (player.x > XLIM) { player.x = XLIM; player.vx = Math.min(0, player.vx); }
   if (player.x < -XLIM) { player.x = -XLIM; player.vx = Math.max(0, player.vx); }
@@ -769,8 +822,7 @@ function updatePlayer(dt) {
   let target = Math.min(cap, player.base + (keys.up ? 3.5 : 0) - (keys.down ? 4 : 0));
   if (run.playTime < 1.5) target *= run.playTime / 1.5;
   player.speed += (target - player.speed) * Math.min(1, dt * 3.2);
-  let v = player.speed;
-  if (player.dash > 0) { v += 15 * (player.dash / 0.28); player.dash -= dt; }
+  const v = player.speed;
   player.dashCd = Math.max(0, player.dashCd - dt);
   player.brushCd = Math.max(0, player.brushCd - dt);
   player.grace = Math.min(1, player.grace + dt * 0.06);
@@ -844,9 +896,13 @@ function updateRooms() {
 const fogColor = new THREE.Color(CHAMBERS[0].hue);
 let last = performance.now();
 function frame(now) {
-  const raw = Math.min(maxDt, (now - last) / 1000);
+  const dt = Math.min(maxDt, (now - last) / 1000);
   last = now;
-  const dt = raw;
+  step(dt);
+  audio.update();
+  composer.render();
+}
+function step(dt) {
   time += dt;
   if (mode === 'play') run.playTime += dt;
   playerPrevZ = player.z;
@@ -887,10 +943,11 @@ function frame(now) {
     shake = Math.max(0, shake - dt * 0.5);
     const sx = REDUCED ? 0 : (Math.random() - 0.5) * shake, sy = REDUCED ? 0 : (Math.random() - 0.5) * shake;
     camera.position.set(player.x + sx, EYE + bob + sy, player.z);
-    camera.rotation.set(0, REDUCED ? 0 : -player.vx * 0.006, REDUCED ? 0 : -player.vx * 0.012);
+    const roll = THREE.MathUtils.clamp(player.vx, -11, 11);
+    camera.rotation.set(0, REDUCED ? 0 : -roll * 0.006, REDUCED ? 0 : -roll * 0.012);
     if (mode === 'dead') camera.rotation.x = Math.min(0.3, camera.rotation.x + dt * 0.35);
   }
-  const fovGoal = fovTarget + (player.dash > 0 ? 9 : 0);
+  const fovGoal = fovTarget + (player.dash > 0 ? 5 : 0);
   if (Math.abs(camera.fov - fovGoal) > 0.05) { camera.fov += (fovGoal - camera.fov) * Math.min(1, dt * 6); camera.updateProjectionMatrix(); }
 
   // fog: the current chamber's one colour, reddening while he walks
@@ -898,9 +955,6 @@ function frame(now) {
   fogColor.lerp(ft, Math.min(1, dt * 2.5));
   scene.fog.color.copy(fogColor);
   scene.fog.density += (fogDensityTarget - scene.fog.density) * Math.min(1, dt * 2);
-
-  audio.update();
-  composer.render();
 }
 renderer.setAnimationLoop(frame);
 
@@ -918,5 +972,13 @@ window.__poe = {
   get godmode() { return debug.godmode; },
   setX(x) { player.x = x; },
   setInput(o) { Object.assign(keys, o); },
-  setResolution(s) { renderer.setPixelRatio(DPR * s); resize(); },
+  setResolution(s) { debugRes = s; resize(); },
+  get rd() { return rd; },
+  get time() { return time; },
+  abort() { if (mode === 'play') { mode = 'title'; rd.hide(); audio.duck(false); } },
+  respawn() { for (const r of rooms) r.spawnRevelers(run.strikes); },
+  revelers() { const r = roomOfIndex(run.curIdx); return r.revelers.map((v) => ({ x: v.x, z: r.zStart + v.z, fallen: v.fallen })); },
+  dash,
+  step,                      // advance the simulation by dt seconds without rendering (bot / playtest)
+  XLIM, HALF, L,
 };

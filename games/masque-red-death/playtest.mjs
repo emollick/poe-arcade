@@ -2,7 +2,8 @@
 /* Seven Chambers — scripted playtest.
  *   node games/masque-red-death/playtest.mjs          (run from the repo root)
  * Serves the repo, plays the game far enough to reach the lose state and (via the
- * window.__poe debug hook) the win state, and writes four screenshots. */
+ * window.__poe debug hook) the win state, and writes six screenshots. The play frames are
+ * stepped deterministically (window.__poe.step) to stroke II with the Red Death inside five units. */
 import http from 'node:http';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -55,6 +56,12 @@ const shot = async (n, pg = page) => {
 };
 const poe = (expr) => page.evaluate(expr);
 const waitFor = (expr, ms = 150000) => page.waitForFunction(expr, null, { timeout: ms, polling: 100 });
+// freeze the rendered clock and walk the simulation forward until he is `within` units of the player (stroke in progress)
+const stepUntilClose = (pg, within) => pg.evaluate(`(() => {
+  const P = window.__poe; P.setMaxDt(0);
+  for (let i = 0; i < 4000 && !(P.strike && P.strike.k >= 2 && P.rd.active && P.player.z - P.rd.z < ${within}); i++) P.step(1 / 60);
+  return JSON.stringify({ k: P.strike && P.strike.k, rung: P.strike && P.strike.rung, dz: +(P.player.z - P.rd.z).toFixed(2), px: +P.player.x.toFixed(2), rdx: +P.rd.x.toFixed(2) });
+})()`);
 
 await page.goto(`http://127.0.0.1:${port}/games/masque-red-death/`, { waitUntil: 'load', timeout: 120000 });
 await page.evaluate(() => document.fonts.ready);
@@ -65,18 +72,19 @@ console.log('title captured');
 // The headless GPU is slow; let the simulation cover real time.
 await poe('window.__poe.setMaxDt(0.6)'); await lowRes(page, true);
 
-/* ---- run 1: play with scripted strafing, capture a frame while the Red Death walks, then let him win ---- */
+/* ---- run 1: play with scripted strafing, capture stroke II with the Red Death close, then let him win ---- */
 await page.mouse.click(720, 450);
 await waitFor('window.__poe.mode === "play"');
-await poe('window.__poe.godmode = true');
+await poe('window.__poe.godmode = true; window.__poe.setStrikes(1);');
 // weave for a few seconds
 let dir = 1;
 for (let i = 0; i < 12; i++) { await poe(`window.__poe.setInput({left:${dir < 0}, right:${dir > 0}})`); dir = -dir; await sleep(350); }
 await poe('window.__poe.setInput({left:false,right:false})');
 await page.keyboard.press('Space');
 await poe('window.__poe.strikeNow()');
-await waitFor('window.__poe.strike && window.__poe.strike.elapsed > 1.1');
-const strikeInfo = await poe('JSON.stringify(__poe.strike ? {k:__poe.strike.k,rung:__poe.strike.rung} : null)');
+await waitFor('window.__poe.strike && window.__poe.strike.k >= 2');
+await poe('window.__poe.setX(-1.9)');
+const strikeInfo = await stepUntilClose(page, 4.6);
 await shot('play');
 console.log('play captured, score', await poe('window.__poe.run.score'), 'strike', strikeInfo);
 // now hang back in his path and let him take us at the next stroke
@@ -114,10 +122,12 @@ await mp.screenshot({ path: path.join(SHOTS, 'masque-red-death-title-mobile.png'
 await mp.evaluate('window.__poe.setMaxDt(0.6)'); await lowRes(mp, true);
 await mp.touchscreen.tap(195, 500);
 await mp.waitForFunction('window.__poe.mode === "play"', null, { timeout: 60000 });
-await mp.evaluate('window.__poe.godmode = true; window.__poe.strikeNow();');
-await mp.waitForFunction('window.__poe.strike && window.__poe.strike.elapsed > 1.1', null, { timeout: 150000 });
+await mp.evaluate('window.__poe.godmode = true; window.__poe.setStrikes(1); window.__poe.strikeNow();');
+await mp.waitForFunction('window.__poe.strike && window.__poe.strike.k >= 2', null, { timeout: 150000 });
+await mp.evaluate('window.__poe.setX(-1.2)');
+const mInfo = await stepUntilClose(mp, 4.2);
 await shot('play-mobile', mp);
-console.log('mobile title + play captured');
+console.log('mobile title + play captured', mInfo);
 await mctx.close();
 
 await browser.close(); srv.close();
