@@ -72,6 +72,19 @@ html, body { background: var(--coal); color: var(--bone); }
 }
 #touch-zones .zone:nth-child(2) { font-size: 22px; }
 #touch-zones .zone.on { opacity: .55; }
+/* portrait: the floor sits at 70% of the height (game.js sets --floor-y), and the buttons live in the
+   flagstone band beneath it — the whole screen still takes touches, this is only where the glyphs sit */
+@media (orientation: portrait) {
+  #touch-zones { top: var(--floor-y, 70vh); }
+  #touch-zones .zone {
+    align-items: center;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    font-size: 40px; opacity: .3;
+    text-shadow: 0 0 12px #000, 0 2px 2px #000;
+  }
+  #touch-zones .zone:nth-child(2) { font-size: 26px; }
+  #touch-zones .zone.on { opacity: .75; }
+}
 
 /* ---------------- screens ---------------- */
 
@@ -212,6 +225,9 @@ button.ornate:active { transform: translateY(1px); }
 .tally .newbest { color: #fff1d6; }
 
 @media (max-width: 480px) {
+  /* the clock row sits under the .poe-back pill (44px tall at top 10px) instead of beside it:
+     at 390 wide the "trumpets at" line was a hair from the pill, and at 360 it ran into it */
+  #hud { top: calc(env(safe-area-inset-top, 0px) + 60px); }
   #hud-time { font-size: 24px; }
   #hud-score { font-size: 28px; }
   .howto { max-width: 34ch; }

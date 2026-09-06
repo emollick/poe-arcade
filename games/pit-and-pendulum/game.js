@@ -16,8 +16,8 @@ const AH = 600;            // arena height in world units
 const FLOOR_Y = 530;       // floor top
 const PIT_W = 130;         // pit width
 const T_WIN = 72;          // seconds until the trumpets
-const PIVOT_Y0 = 12;       // starting pivot height
-const PIVOT_MAX = 205;     // the deepest the pivot may sink (keeps the end beatable)
+const PIVOT_Y0 = 60;       // starting pivot height (hop-under lethal from ~25s, standing under from ~46s)
+const PIVOT_MAX = 190;     // the deepest the pivot may sink (reached ~51s; the safe strip then starts ~135 from the centre)
 const NOTCH = 3.4;         // pivot drop per centre pass
 const ROD = 290;           // rod length
 const BLADE_HALF = 78;     // half chord of the crescent
@@ -63,12 +63,18 @@ let isMobile = matchMedia('(pointer: coarse)').matches;
 fitCanvas(canvas, ({ width, height, dpr }) => { W = width; H = height; DPR = dpr; bgCache = null; });
 
 function baseScale() { return Math.min(W / AW, H / AH); }
+let floorBand = -1;
 function layout() {
   const s0 = baseScale();
   const s = s0 * view.zoom;
   view.s = s;
   view.ox = (W - AW * s) / 2 + shake.x;
-  view.oy = (H - AH * s) / 2 + shake.y + (cam.dy || 0);
+  // portrait: the floor sits at 70% of the height — the chain climbs the whole frame above it and
+  // the touch buttons live in the band below it. Landscape centres the arena.
+  const oy = (W < H) ? H * 0.70 - FLOOR_Y * s : (H - AH * s) / 2;
+  view.oy = oy + shake.y + (cam.dy || 0);
+  const band = (W < H) ? Math.round(H * 0.70) : -1;
+  if (band !== floorBand) { floorBand = band; document.documentElement.style.setProperty('--floor-y', band < 0 ? '' : band + 'px'); }
 }
 const cam = { dy: 0 };
 let worldRectOverride = null; // the title poster lends its own rect
@@ -177,21 +183,25 @@ function onCollision(e) {
     const other = A === man ? B : (B === man ? A : null);
     if (other) {
       // anything under the feet counts as ground
-      for (const s of p.collision.supports) if (s.y > man.position.y + 14) manInfo.grounded = true;
+      for (const s of p.collision.supports) if (s.y > man.position.y + 14 && (other.label !== 'rat' || other.position.y > man.bounds.max.y - 4)) manInfo.grounded = true;
       if (other.label === 'blade' && state === 'playing' && !debugInvincible) { die('sliced'); return; }
       if (other.label === 'wall' && state === 'playing') burn(other);
-      if (other.label === 'rat' && state === 'playing') bitten(other);
+      if (other.label === 'rat' && state === 'playing') { ratShove(p, other, e.name === 'collisionStart'); bitten(other); }
       continue;
     }
   }
 }
 
+// how far a wall's heat reaches from its face: nothing until the iron is well lit, ~35 units when it is white
+function searReach() { return clamp((wall.heat - 0.6) * 90, 0, 35); }
+
 function burn(w) {
   if (wall.heat < 0.15 || manInfo.burnCd > 0) return;
   manInfo.burnCd = 0.7;
+  manInfo.stagger = 0.12;                                        // flung: no footing for a few steps
   const dir = (w === wallL) ? 1 : -1;
-  Body.setVelocity(man, { x: dir * 5.5, y: Math.min(man.velocity.y, -2.5) });
-  addScore(-10, 'seared −10', '#ff6a3a');
+  Body.setVelocity(man, { x: dir * 11, y: Math.min(man.velocity.y, -2.5) });
+  addScore(-4, 'seared −4', '#ff6a3a');
   manInfo.flash = 0.35;
   shakeIt(6);
   sfx.sizzle();
@@ -199,16 +209,65 @@ function burn(w) {
   for (let i = 0; i < 14; i++) embers.push({ x: man.position.x - dir * 8, y: man.position.y + (Math.random() - .5) * 30, vx: dir * (1 + Math.random() * 3), vy: -1 - Math.random() * 3, life: 0.5 + Math.random() * 0.5, r: 1 + Math.random() * 1.5 });
 }
 
+// the rats are a tide toward the pit: a rat running at the pit shoves him (one at a time, and each
+// gives up after a moment and scrambles over him), a rat running away from it only bites on its way past.
+// A pair made a sensor stays one for its life, and Matter fires collisionStart before it resolves the step.
+function ratShove(pair, rat, starting) {
+  const pl = rat.plugin;
+  if (pl.phased) { pair.isSensor = true; return; }
+  if (pair.isSensor) return;
+  const towardPit = (rat.position.x < AW / 2 ? 1 : -1) === pl.dir;
+  if (!towardPit) { pl.phased = true; pair.isSensor = true; return; }
+  if (rat.position.y > man.bounds.max.y - 4) return;           // under his feet: he stands on it
+  if (starting) {
+    let pushing = 0;
+    for (const q of engine.pairs.list) {
+      if (q === pair || !q.isActive || q.isSensor) continue;
+      const A = q.bodyA.parent, B = q.bodyB.parent;
+      if ((A === man && B.label === 'rat') || (B === man && A.label === 'rat')) pushing++;
+    }
+    if (pushing >= 1) { pl.phased = true; pair.isSensor = true; return; }
+  }
+  pl.blocked = (pl.blocked || 0) + 1;
+  if (pl.blocked > 12) { pl.phased = true; pair.isSensor = true; }
+}
+
 function bitten(rat) {
   if (manInfo.biteCd > 0) return;
-  // only a bite if the rat is not under his feet
-  if (rat.position.y > man.position.y + 14) return;
+  // only a bite if the rat is not under his feet (a rat on the flagstones sits at FLOOR_Y − 7, beside his shins)
+  if (rat.position.y > man.bounds.max.y - 4) return;
   manInfo.biteCd = 0.45;
   addScore(-2, 'bitten −2', '#c9b9a0');
   Body.setVelocity(man, { x: man.velocity.x + rat.plugin.dir * 1.8, y: man.velocity.y });
   manInfo.flash = 0.2;
   sfx.bite();
   stats.bites++;
+}
+
+/* ------------------------------------------------------------------ blade geometry */
+
+// the lowest point of the crescent's plates over a column of x (−Infinity when nothing hangs over it)
+function bladeEdgeOver(x0, x1) {
+  let low = -Infinity;
+  for (let i = 1; i < blade.parts.length; i++) {
+    const vs = blade.parts[i].vertices;
+    for (let j = 0; j < vs.length; j++) {
+      const a = vs[j], b = vs[(j + 1) % vs.length];
+      const lo = Math.min(a.x, b.x), hi = Math.max(a.x, b.x);
+      if (hi < x0 || lo > x1) continue;
+      if (hi - lo < 0.01) { low = Math.max(low, a.y, b.y); continue; }
+      const yAt = (x) => a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x);
+      low = Math.max(low, yAt(Math.max(lo, x0)), yAt(Math.min(hi, x1)));
+    }
+  }
+  return low;
+}
+// how far the edge is above his head/shoulders right now (Infinity when the blade is elsewhere)
+function bladeClearance() {
+  const mx = man.position.x, my = man.position.y;
+  const head = man.bounds.min.y - bladeEdgeOver(mx - 8, mx + 8);
+  const torso = (my - 13) - bladeEdgeOver(mx - 11, mx + 11);
+  return Math.min(head, torso);
 }
 
 /* ------------------------------------------------------------------ score */
@@ -224,9 +283,9 @@ function shakeIt(amt) { if (!reduced) shake.t = Math.max(shake.t, amt); }
 /* ------------------------------------------------------------------ schedule */
 
 // wall progress 0..1: slow creep plus four surges that shove
-const SURGES = [[18, 1.3, 0.1], [32, 1.2, 0.15], [46, 1.0, 0.2], [60, 1.0, 0.2]];
+const SURGES = [[12, 1.3, 0.1], [32, 1.2, 0.15], [46, 1.0, 0.2], [60, 1.0, 0.2]];
 function wallProgress(t) {
-  let f = 0.35 * clamp((t - 8) / (T_WIN - 8), 0, 1);
+  let f = 0.45 * clamp((t - 4) / (T_WIN - 4), 0, 1);
   for (const [at, dur, w] of SURGES) f += w * smooth((t - at) / dur);
   return clamp(f, 0, 1);
 }
@@ -253,7 +312,7 @@ function scheduleRats(dt) {
     const s = both ? (i % 2 ? 1 : -1) : side;
     setTimeout(() => { if (state === 'playing') spawnRat(s, speed + (Math.random() - .5) * 0.8); }, i * (220 - prog * 90));
   }
-  waves.next = 7.5 - prog * 3.2 + Math.random() * 1.5;
+  waves.next = 5.0 - prog * 2.3 + Math.random() * 1.0;
   floaties.push({ x: AW / 2 + side * (wall.half - 40) * (both ? 0 : 1), y: FLOOR_Y - 60, text: both ? 'rats — both sides' : 'rats', color: '#a9998a', life: 1.4, vy: -14, italic: true });
 }
 
@@ -286,14 +345,16 @@ function step(dt) {
   if (!manInfo.dead && state === 'playing') {
     const target = (input.right ? 1 : 0) - (input.left ? 1 : 0);
     const spd = 4.3;
-    const vx = manInfo.grounded ? lerp(man.velocity.x, target * spd, 0.35) : lerp(man.velocity.x, target * spd, 0.12);
+    const staggered = (manInfo.stagger || 0) > 0;
+    if (staggered) manInfo.stagger -= dt;
+    const vx = staggered ? man.velocity.x : (manInfo.grounded ? lerp(man.velocity.x, target * spd, 0.35) : lerp(man.velocity.x, target * spd, 0.12));
     Body.setVelocity(man, { x: vx, y: man.velocity.y });
     if (target) manInfo.dir = target;
     manInfo.run += Math.abs(vx) * dt * 3.2;
     manInfo.coyote = manInfo.grounded ? 0.1 : manInfo.coyote - dt;
     if (input.hopQueued) { manInfo.buffer = 0.12; input.hopQueued = false; }
     manInfo.buffer -= dt;
-    if (manInfo.buffer > 0 && manInfo.coyote > 0) {
+    if (manInfo.buffer > 0 && manInfo.coyote > 0 && !staggered) {
       Body.setVelocity(man, { x: man.velocity.x, y: -7.2 });
       manInfo.buffer = 0; manInfo.coyote = 0; manInfo.grounded = false;
       sfx.hop();
@@ -301,6 +362,9 @@ function step(dt) {
     }
     if (!manInfo.grounded) manInfo.air += dt; else { if (manInfo.air > 0.25) sfx.land(manInfo.air); manInfo.air = 0; }
     manInfo.burnCd -= dt; manInfo.biteCd -= dt; manInfo.flash = Math.max(0, manInfo.flash - dt);
+    // the heat itself sears him before the iron does
+    const sear = searReach();
+    if (sear > 0 && Math.abs(man.position.x - cx) > wall.half - 11 - sear) burn(man.position.x < cx ? wallL : wallR);
     if (man.position.y > FLOOR_Y + 40) {
       if (!debugInvincible) die('fell');
       else { Body.setPosition(man, { x: cx - 170, y: FLOOR_Y - 30 }); Body.setVelocity(man, { x: 0, y: 0 }); }
@@ -339,21 +403,18 @@ function step(dt) {
       const f = -Math.sign(vt) * blade.mass * G_FORCE * Math.min(0.7, Math.abs(vt) * 0.25);
       Body.applyForce(blade, blade.position, { x: f * tx, y: f * ty });
     }
-    bladeInfo.th = th; bladeInfo.vt = vt; bladeInfo.speed = Math.abs(vt) * 60;
+    bladeInfo.th = th; bladeInfo.vt = vt; bladeInfo.speed = Math.abs(vt) * 60; bladeInfo.reach = L * Math.sin(ampNow);
     // a rigid rod holds its blade square to itself
     Body.setAngle(blade, -th);
     Body.setAngularVelocity(blade, 0);
   }
 
-  // ---- near miss: the edge passes within a hair of his head
+  // ---- near miss: the edge passes within a hair of his head (the true edge over his column, not the bounds)
   if (state === 'playing' && !manInfo.dead) {
-    const headY = man.bounds.min.y;
-    const edgeY = blade.bounds.max.y;
-    const overlapX = Math.abs(blade.position.x - man.position.x) < BLADE_HALF * 0.85;
-    const clearance = headY - edgeY;
-    if (overlapX && clearance > 0 && clearance < 26 && bladeInfo.speed > 120 && time - bladeInfo.lastNear > 0.9) {
+    const clearance = bladeClearance();
+    if (clearance > 0 && clearance < 26 && bladeInfo.speed > 120 && time - bladeInfo.lastNear > 0.9) {
       bladeInfo.lastNear = time;
-      addScore(5, 'a hair’s breadth +5', '#f0a05a');
+      addScore(10, 'a hair’s breadth +10', '#f0a05a');
       stats.near++;
       sfx.heartbeat();
       if (!reduced) slowmo = 0.28;
@@ -379,12 +440,13 @@ function step(dt) {
     if (state === 'playing' && !manInfo.dead) {
       const rel = Math.sign(r.position.x - man.position.x);
       if (pl.lastRel && rel && rel !== pl.lastRel && !wasGrounded && man.bounds.max.y < r.bounds.min.y + 6 && !pl.hopped) {
-        pl.hopped = true; addScore(2, '+2', '#d9cdb5'); stats.rats++;
+        pl.hopped = true; addScore(1, '+1', '#d9cdb5'); stats.rats++;
       }
       pl.lastRel = rel;
     }
     pl.phase += dt * 22;
-    const gone = r.position.y > AH + 120 || (r.position.x - cx) * pl.dir > wall.half - 6 || Math.abs(r.position.x - cx) > wall.half + 40;
+    // gone once it reaches the far wall (its centre sits a radius off the face, so allow for that) or falls out of the world
+    const gone = r.position.y > AH + 120 || (r.position.x - cx) * pl.dir > wall.half - 14 || Math.abs(r.position.x - cx) > wall.half + 40;
     if (gone) { Composite.remove(world, r); rats.splice(i, 1); }
   }
   if (state === 'playing') scheduleRats(dt);
@@ -471,7 +533,7 @@ function startGame() {
   time = 0; acc = 0; score = 0; slowmo = 0; cam.dy = 0; deathT = 0; endT = 0;
   stats = { near: 0, rats: 0, hops: 0, burns: 0, bites: 0, seconds: 0 };
   floaties = []; embers = [];
-  waves = { next: 4.5, n: 0 };
+  waves = { next: 3.5, n: 0 };
   manInfo = { grounded: true, coyote: 0, buffer: 0, dir: 1, run: 0, burnCd: 0, biteCd: 0, air: 0, flash: 0, dead: false, rescue: null, endShown: false };
   ui.score.textContent = '0'; ui.tNow.textContent = '0:00'; ui.time.classList.remove('hark');
   ui.title.hidden = true; ui.end.hidden = true; ui.hud.hidden = false;
@@ -780,8 +842,13 @@ function drawRat(c, r, t) {
   c.fillStyle = '#3b3532';
   c.beginPath(); c.ellipse(0, 1, 8.5, 5.2, 0, 0, 7); c.fill();
   c.fillStyle = '#4b433f'; c.beginPath(); c.ellipse(-1, -1, 6, 3, 0, 0, 7); c.fill();
+  // a bone-pale belly, lit from below by the flagstones
+  c.strokeStyle = 'rgba(214,200,172,.62)'; c.lineWidth = 1.4; c.lineCap = 'round';
+  c.beginPath(); c.ellipse(0.5, 1.2, 7.6, 4.6, 0, 0.35, 2.85); c.stroke();
   // head
   c.fillStyle = '#3b3532'; c.beginPath(); c.ellipse(7, -0.5, 4.2, 3.2, 0.1, 0, 7); c.fill();
+  c.strokeStyle = 'rgba(214,200,172,.5)'; c.lineWidth = 1.1;
+  c.beginPath(); c.ellipse(7.2, -0.3, 3.6, 2.7, 0.1, 0.5, 2.4); c.stroke();
   c.fillStyle = '#5a504b'; c.beginPath(); c.arc(4.5, -3.5, 1.9, 0, 7); c.fill();
   c.fillStyle = '#ffb090'; c.beginPath(); c.arc(8.4, -1.3, 0.9, 0, 7); c.fill(); // the eye catches the torch
   c.restore();
@@ -865,12 +932,18 @@ function drawCrescent(c, half, thick, edgeGlow) {
 }
 
 function drawBlade(c, t) {
-  // the screw that lowers the pivot, then the rods, then the crescent
+  // the screw that lowers the pivot — threaded from the top of the frame, however high that is — then the rods, then the crescent
   const px = pivot.x, py = pivot.y;
-  c.fillStyle = '#1a1a1c'; c.fillRect(px - 7, -20, 14, py + 8);
-  c.fillStyle = '#3a3b3f'; c.fillRect(px - 4, -20, 8, py + 8);
+  const top = Math.min(-20, worldRect().y - 10);
+  c.fillStyle = '#1a1a1c'; c.fillRect(px - 7, top, 14, py - top + 8);
+  c.fillStyle = '#3a3b3f'; c.fillRect(px - 4, top, 8, py - top + 8);
   c.strokeStyle = 'rgba(0,0,0,.6)'; c.lineWidth = 1.5;
-  for (let y = 0; y < py + 4; y += 7) { c.beginPath(); c.moveTo(px - 7, y); c.lineTo(px + 7, y + 3); c.stroke(); }
+  for (let y = Math.ceil(top / 7) * 7; y < py + 4; y += 7) { c.beginPath(); c.moveTo(px - 7, y); c.lineTo(px + 7, y + 3); c.stroke(); }
+  // the chain links that carry the screw, up into the dark
+  c.strokeStyle = '#2a2b2e'; c.lineWidth = 3;
+  for (let y = Math.ceil(top / 22) * 22; y < py - 30; y += 22) { c.beginPath(); c.ellipse(px, y, 5, 9, 0, 0, 7); c.stroke(); }
+  c.strokeStyle = 'rgba(160,160,170,.35)'; c.lineWidth = 1;
+  for (let y = Math.ceil(top / 22) * 22; y < py - 30; y += 22) { c.beginPath(); c.ellipse(px - 1, y - 1, 4, 8, 0, 3.6, 5.2); c.stroke(); }
   // pivot block
   c.fillStyle = IRON; c.fillRect(px - 16, py - 12, 32, 20);
   c.fillStyle = '#26272a'; c.beginPath(); c.arc(px, py, 6, 0, 7); c.fill();
@@ -925,6 +998,17 @@ function drawLighting(c, t, opts = {}) {
       const wg = c.createRadialGradient(face, 340, 4, face, 340, 260);
       wg.addColorStop(0, `rgba(255,50,20,${0.28 * glow})`); wg.addColorStop(1, 'rgba(0,0,0,0)');
       c.fillStyle = wg; c.fillRect(face - 260, 60, 520, 500);
+    }
+  }
+  // the flagstones nearest a white-hot wall glow: that strip sears him without a touch
+  if (!opts.noWalls) {
+    const sear = searReach() * dim;
+    if (sear > 0.5) for (const side of [-1, 1]) {
+      const face = AW / 2 + side * wall.half;
+      const pulse = 0.7 + 0.3 * Math.sin(t * 6 + side);
+      const sg = c.createLinearGradient(face, 0, face - side * (sear + 10), 0);
+      sg.addColorStop(0, `rgba(255,90,30,${0.55 * pulse})`); sg.addColorStop(0.6, `rgba(255,50,20,${0.22 * pulse})`); sg.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = sg; c.fillRect(Math.min(face, face - side * (sear + 10)), FLOOR_Y - 2, sear + 10, 24);
     }
   }
   c.globalCompositeOperation = 'source-over';
@@ -1149,12 +1233,88 @@ function render(t) {
     return;
   }
 
-  c.setTransform(DPR * s, 0, 0, DPR * s, DPR * view.ox, DPR * view.oy);
-  drawScene(c, t);
-  c.setTransform(DPR, 0, 0, DPR, 0, 0);
-  if (state === 'fell') { const a = clamp(deathT / 2.4, 0, 1) * 0.7; c.fillStyle = `rgba(0,0,0,${a * a})`; c.fillRect(0, 0, W, H); }
+  // the pit: follow him down for a moment, then the view turns and looks back up the shaft
+  const shaft = state === 'fell' ? clamp((deathT - 0.9) / 0.8, 0, 1) : 0;
+  if (shaft < 1) {
+    c.setTransform(DPR * s, 0, 0, DPR * s, DPR * view.ox, DPR * view.oy);
+    drawScene(c, t);
+    c.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  if (shaft > 0) { c.globalAlpha = shaft; drawShaft(c, t); c.globalAlpha = 1; }
   drawVignette(c);
   drawGrain(c);
+}
+
+/* ---- the Fallen card: from the bottom of the pit, a dim column of brick receding to the lit mouth of the cell */
+function drawShaft(c, t) {
+  const vx = W / 2, vy = H * 0.36;
+  // the mouth shrinks as he falls, then hangs there, far above (behind the card's title)
+  const fall = smooth(clamp((deathT - 0.9) / 3.2, 0, 1));
+  const sway = reduced ? 0 : Math.sin(t * 0.7) * 3;
+  const mw = Math.min(W, H) * lerp(0.46, 0.11, fall), mh = mw * 0.62;
+  const N = 15, g = 1.2;
+  c.fillStyle = '#050403'; c.fillRect(0, 0, W, H);
+  // rings of brick, nearest (largest, darkest) first
+  const rings = [];
+  for (let i = N; i >= 1; i--) rings.push({ i, w: mw * g ** i, h: mh * g ** i });
+  for (const r of rings) {
+    const k = 1 - r.i / N;                                      // 1 near the mouth, 0 near the eye
+    const lum = 8 + 78 * k * k;
+    c.fillStyle = `rgb(${lum + 8 + 20 * k},${lum},${lum - 5 + 2 * k})`;
+    c.fillRect(vx - r.w / 2 + sway * (1 - k), vy - r.h / 2, r.w, r.h);
+  }
+  // mortar: the ring edges, and joints radiating from the mouth's corners and faces
+  c.strokeStyle = 'rgba(0,0,0,.55)'; c.lineWidth = 1.5;
+  for (const r of rings) { const k = 1 - r.i / N; c.strokeRect(vx - r.w / 2 + sway * (1 - k), vy - r.h / 2, r.w, r.h); }
+  c.lineWidth = 1.2;
+  const far = rings[0], near = rings[rings.length - 1];
+  const joint = (u, v) => { // from a point on the mouth's edge (u,v in [-1,1]) outward to the frame
+    c.beginPath(); c.moveTo(vx + u * near.w / 2 + sway, vy + v * near.h / 2); c.lineTo(vx + u * far.w / 2, vy + v * far.h / 2); c.stroke();
+  };
+  for (const u of [-1, -0.5, 0, 0.5, 1]) { joint(u, -1); joint(u, 1); }
+  for (const v of [-1, -0.45, 0.1, 0.65, 1]) { joint(-1, v); joint(1, v); }
+  // staggered half-bricks: short joints between alternate rings
+  c.strokeStyle = 'rgba(0,0,0,.4)';
+  for (let j = 0; j < rings.length - 1; j += 2) {
+    const a = rings[j], b = rings[j + 1];
+    for (const u of [-0.75, -0.25, 0.25, 0.75]) {
+      c.beginPath(); c.moveTo(vx + u * a.w / 2, vy - a.h / 2); c.lineTo(vx + u * b.w / 2, vy - b.h / 2); c.stroke();
+      c.beginPath(); c.moveTo(vx + u * a.w / 2, vy + a.h / 2); c.lineTo(vx + u * b.w / 2, vy + b.h / 2); c.stroke();
+    }
+    for (const v of [-0.7, -0.2, 0.35, 0.85]) {
+      c.beginPath(); c.moveTo(vx - a.w / 2, vy + v * a.h / 2); c.lineTo(vx - b.w / 2, vy + v * b.h / 2); c.stroke();
+      c.beginPath(); c.moveTo(vx + a.w / 2, vy + v * a.h / 2); c.lineTo(vx + b.w / 2, vy + v * b.h / 2); c.stroke();
+    }
+  }
+  // the lit mouth of the cell: torch-warm brick, the hot walls at its sides, the crescent hanging across it
+  const mx = vx - mw / 2 + sway, my = vy - mh / 2;
+  const fl = reduced ? 0.95 : flicker(t);
+  const cell = c.createLinearGradient(mx, my, mx + mw, my);
+  cell.addColorStop(0, `rgb(${150 * fl | 0},${70 * fl | 0},${30 * fl | 0})`);
+  cell.addColorStop(0.35, `rgb(${105 * fl | 0},${62 * fl | 0},${40 * fl | 0})`);
+  cell.addColorStop(1, `rgb(${52 * fl | 0},${38 * fl | 0},${30 * fl | 0})`);
+  c.fillStyle = cell; c.fillRect(mx, my, mw, mh);
+  c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 1;
+  for (let y = my + mh * 0.18; y < my + mh; y += mh * 0.18) { c.beginPath(); c.moveTo(mx, y); c.lineTo(mx + mw, y); c.stroke(); }
+  const ember = 0.6 + 0.4 * Math.sin(t * 2.1);
+  c.fillStyle = `rgba(255,60,20,${0.55 * ember})`; c.fillRect(mx, my, mw * 0.06, mh); c.fillRect(mx + mw * 0.94, my, mw * 0.06, mh);
+  c.save(); c.beginPath(); c.rect(mx, my, mw, mh); c.clip();
+  c.translate(mx + mw / 2, my + mh * 0.42); c.rotate(reduced ? 0 : Math.sin(t * 0.55) * 0.12);
+  c.fillStyle = '#141416';
+  c.beginPath(); c.moveTo(-mw * 0.46, -mh * 0.05); c.quadraticCurveTo(0, mh * 0.42, mw * 0.46, -mh * 0.05); c.quadraticCurveTo(0, mh * 0.16, -mw * 0.46, -mh * 0.05); c.closePath(); c.fill();
+  c.strokeStyle = 'rgba(255,246,230,.85)'; c.lineWidth = Math.max(1, mw * 0.012);
+  c.beginPath(); c.moveTo(-mw * 0.46, -mh * 0.05); c.quadraticCurveTo(0, mh * 0.42, mw * 0.46, -mh * 0.05); c.stroke();
+  c.restore();
+  // the light spills a little way down the shaft
+  c.globalCompositeOperation = 'lighter';
+  const spill = c.createRadialGradient(vx + sway, vy, mw * 0.3, vx + sway, vy, mw * 2.2);
+  spill.addColorStop(0, `rgba(196,86,28,${0.28 * fl})`); spill.addColorStop(0.4, `rgba(120,50,16,${0.12 * fl})`); spill.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = spill; c.fillRect(0, 0, W, H);
+  c.globalCompositeOperation = 'source-over';
+  // the dark closes in from the edges
+  const edge = c.createRadialGradient(vx, vy, Math.min(W, H) * 0.25, vx, vy, Math.max(W, H) * 0.75);
+  edge.addColorStop(0, 'rgba(0,0,0,0)'); edge.addColorStop(1, 'rgba(0,0,0,.85)');
+  c.fillStyle = edge; c.fillRect(0, 0, W, H);
 }
 
 function drawScene(c, t) {
@@ -1216,8 +1376,14 @@ window.__poe = {
   get time() { return time; },
   get score() { return score; },
   get stats() { return stats; },
-  get man() { return man ? { x: man.position.x, y: man.position.y, vx: man.velocity.x, vy: man.velocity.y } : null; },
-  get blade() { return blade ? { x: blade.position.x, y: blade.position.y, angle: blade.angle, th: bladeInfo.th, pivotY: pivot.y, speed: bladeInfo.speed, edgeY: blade.bounds.max.y, rod: Math.hypot(blade.position.x - pivot.x, blade.position.y - pivot.y) } : null; },
+  get man() { return man ? { x: man.position.x, y: man.position.y, vx: man.velocity.x, vy: man.velocity.y, mass: man.mass } : null; },
+  get blade() { return blade ? { x: blade.position.x, y: blade.position.y, vx: blade.velocity.x, vy: blade.velocity.y, angle: blade.angle, th: bladeInfo.th, pivotY: pivot.y, speed: bladeInfo.speed, reach: bladeInfo.reach || 0, edgeY: blade.bounds.max.y, clearance: man ? bladeClearance() : null, rod: Math.hypot(blade.position.x - pivot.x, blade.position.y - pivot.y) } : null; },
+  // the crescent's plates in its own frame (relative to its centre of mass, at angle 0), for bots that predict passes
+  get bladeShape() {
+    if (!blade) return null;
+    const a = -blade.angle, ca = Math.cos(a), sa = Math.sin(a), { x, y } = blade.position;
+    return blade.parts.slice(1).map((p) => p.vertices.map((v) => ({ x: (v.x - x) * ca - (v.y - y) * sa, y: (v.x - x) * sa + (v.y - y) * ca })));
+  },
   get walls() { return { half: wall.half, heat: wall.heat, surge: wall.surge }; },
   get rats() { return rats.map((r) => ({ x: r.position.x, y: r.position.y, dir: r.plugin.dir })); },
   get AW() { return AW; }, FLOOR_Y, PIT_W, T_WIN,
