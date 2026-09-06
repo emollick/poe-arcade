@@ -1,0 +1,228 @@
+/* THE DESCENDING BLADE — chiaroscuro chrome.
+   Two colours own this game: torch rust #c4561c and iron #4a4b4f.
+   Everything else is black, bone, and the ember-red of the demons. */
+
+:root {
+  --rust: #c4561c;
+  --rust-hi: #f0a05a;
+  --iron: #4a4b4f;
+  --bone: #e6dcc6;
+  --ember: #ff3d1c;
+  --coal: #060505;
+}
+
+html, body { background: var(--coal); color: var(--bone); }
+
+#c {
+  position: fixed; inset: 0;
+  width: 100%; height: 100%;
+  display: block;
+  cursor: none;
+}
+
+/* ---------------- HUD ---------------- */
+
+#hud {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 0; right: 0;
+  pointer-events: none;
+  z-index: 5;
+  font-family: 'Pirata One', 'IM Fell English', serif;
+  color: var(--bone);
+  text-shadow: 0 0 8px rgba(0,0,0,.9), 0 2px 2px #000;
+}
+#hud-time {
+  position: absolute; left: 50%; top: 0; transform: translateX(-50%);
+  text-align: center; line-height: 1;
+  font-size: 30px;
+  letter-spacing: .04em;
+}
+#hud-time small, #hud-score small {
+  display: block;
+  font-family: 'Old Standard TT', 'IM Fell English', serif;
+  font-style: italic;
+  font-size: 12px;
+  letter-spacing: .06em;
+  opacity: .62;
+  margin-top: 5px;
+}
+#hud-score {
+  position: absolute; right: calc(env(safe-area-inset-right, 0px) + 18px); top: 0;
+  text-align: right; line-height: 1;
+  font-size: 34px;
+  color: var(--rust-hi);
+}
+#hud-score.hot { animation: score-pop .35s ease-out; }
+@keyframes score-pop { 0% { transform: scale(1.25); } 100% { transform: scale(1); } }
+#hud-time.hark { color: var(--rust-hi); }
+
+/* ---------------- touch zones ---------------- */
+
+#touch-zones {
+  position: fixed; inset: 0; z-index: 4; pointer-events: none;
+  display: flex;
+}
+#touch-zones[hidden] { display: none; }
+#touch-zones .zone {
+  flex: 1; display: flex; align-items: flex-end; justify-content: center;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+  font-family: 'Cinzel', serif;
+  font-size: 34px; color: var(--bone); opacity: .18;
+}
+#touch-zones .zone:nth-child(2) { font-size: 22px; }
+#touch-zones .zone.on { opacity: .55; }
+
+/* ---------------- screens ---------------- */
+
+.screen {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+  padding: 24px calc(18px + env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) calc(18px + env(safe-area-inset-left, 0px));
+  pointer-events: none;
+  font-family: 'Old Standard TT', 'IM Fell English', serif;
+}
+.screen[hidden] { display: none; }
+.screen > * { pointer-events: auto; }
+
+.kicker {
+  font-family: 'Old Standard TT', serif;
+  font-style: italic;
+  font-size: 13px;
+  letter-spacing: .28em;
+  text-transform: uppercase;
+  color: rgba(230,220,198,.62);
+  margin-bottom: 8px;
+  text-shadow: 0 1px 6px #000;
+}
+
+/* the title sits ACROSS the pit: pushed below the mid-line on purpose */
+#title { justify-content: flex-start; padding-top: 49.5vh; }
+#title .kicker { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 22px); left: 0; right: 0; margin: 0; }
+.howto .touch { display: none; }
+@media (pointer: coarse) { .howto .keys { display: none; } .howto .touch { display: inline; } }
+
+#title h1 {
+  font-family: 'UnifrakturMaguntia', 'Pirata One', serif;
+  font-weight: 400;
+  font-size: clamp(54px, 9.6vw, 126px);
+  line-height: .84;
+  margin: 0 0 6px;
+  color: var(--bone);
+  letter-spacing: .01em;
+  text-shadow:
+    0 0 2px #fff4e0,
+    0 0 18px rgba(240,160,90,.55),
+    0 0 60px rgba(196,86,28,.45),
+    0 6px 8px #000;
+}
+#title h1 span {
+  display: block;
+  font-size: .42em;
+  line-height: 1;
+  letter-spacing: .06em;
+  color: rgba(230,220,198,.72);
+  text-shadow: 0 0 12px rgba(240,160,90,.4), 0 3px 4px #000;
+}
+#title h1 span:first-child { margin-bottom: .1em; }
+#title h1 span:last-child { margin-top: .12em; }
+
+.howto, .goal, .best {
+  max-width: 64ch;
+  margin: 4px 0;
+  font-size: clamp(13px, 1.45vw, 17px);
+  line-height: 1.55;
+  color: rgba(230,220,198,.86);
+  text-shadow: 0 1px 4px #000, 0 0 14px #000;
+}
+.howto b { font-family: 'Pirata One', serif; font-weight: 400; font-size: 1.15em; color: var(--rust-hi); }
+.goal { font-style: italic; opacity: .82; }
+.best { font-family: 'Pirata One', serif; letter-spacing: .05em; color: var(--rust-hi); margin-top: 8px; }
+.best span:last-child { font-family: 'Old Standard TT', serif; font-style: italic; color: rgba(230,220,198,.7); letter-spacing: 0; }
+
+button.ornate {
+  margin-top: 18px;
+  appearance: none; -webkit-appearance: none;
+  background: linear-gradient(180deg, rgba(26,20,16,.85), rgba(8,6,5,.92));
+  color: var(--bone);
+  border: 1px solid rgba(240,160,90,.55);
+  outline-offset: 4px;
+  padding: 13px 30px;
+  font-family: 'Pirata One', 'IM Fell English', serif;
+  font-size: clamp(20px, 2.4vw, 27px);
+  letter-spacing: .1em;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px #000, 0 0 24px rgba(196,86,28,.28), inset 0 0 20px rgba(196,86,28,.14);
+  transition: transform .12s ease, box-shadow .2s ease, border-color .2s ease;
+}
+button.ornate i { font-style: normal; color: var(--rust-hi); font-size: .8em; margin: 0 6px; }
+button.ornate:hover, button.ornate:focus-visible {
+  border-color: var(--rust-hi);
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px #000, 0 0 40px rgba(240,160,90,.4), inset 0 0 26px rgba(196,86,28,.24);
+}
+button.ornate:active { transform: translateY(1px); }
+
+@keyframes breathe { 0%,100% { opacity:.86 } 50% { opacity:1 } }
+#title button { animation: breathe 2.8s ease-in-out infinite; }
+
+/* ---------------- end screens ---------------- */
+
+#end { justify-content: center; background: radial-gradient(ellipse at 50% 60%, rgba(0,0,0,0) 30%, rgba(0,0,0,.55) 100%); }
+#end h2 {
+  font-family: 'UnifrakturMaguntia', 'Pirata One', serif;
+  font-weight: 400;
+  font-size: clamp(44px, 8vw, 104px);
+  line-height: 1;
+  margin: 0 0 18px;
+  color: var(--bone);
+  text-shadow: 0 0 2px #fff4e0, 0 0 22px rgba(240,160,90,.5), 0 6px 8px #000;
+}
+#end.slain h2 { color: #d8d8dc; text-shadow: 0 0 2px #fff, 0 0 26px rgba(220,220,230,.45), 0 6px 8px #000; }
+#end.fell h2 { color: #8e8a80; text-shadow: 0 0 20px #000, 0 6px 8px #000; }
+#end.won h2 { color: #fff1d6; text-shadow: 0 0 3px #fff, 0 0 30px rgba(255,220,160,.6), 0 0 90px rgba(240,160,90,.5); }
+#end blockquote {
+  margin: 0 0 22px;
+  max-width: 44ch;
+  font-style: italic;
+  font-size: clamp(16px, 2vw, 22px);
+  line-height: 1.5;
+  color: rgba(230,220,198,.9);
+  text-shadow: 0 1px 4px #000, 0 0 16px #000;
+}
+#end blockquote::before { content: '\201C'; opacity: .5; }
+#end blockquote::after { content: '\201D'; opacity: .5; }
+.tally {
+  font-family: 'Pirata One', serif;
+  font-size: clamp(22px, 3vw, 34px);
+  letter-spacing: .05em;
+  color: var(--rust-hi);
+  text-shadow: 0 2px 4px #000, 0 0 16px rgba(196,86,28,.4);
+}
+.tally small {
+  display: block;
+  font-family: 'Old Standard TT', serif;
+  font-style: italic;
+  font-size: .5em;
+  letter-spacing: .04em;
+  color: rgba(230,220,198,.7);
+  margin-top: 6px;
+}
+.tally .newbest { color: #fff1d6; }
+
+@media (max-width: 480px) {
+  #hud-time { font-size: 24px; }
+  #hud-score { font-size: 28px; }
+  .howto { max-width: 34ch; }
+  .goal { max-width: 36ch; }
+  #title { padding-top: 47vh; }
+  #title .kicker { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); font-size: 11px; letter-spacing: .2em; }
+  #title .kicker .long { display: none; }
+  #title h1 { font-size: clamp(50px, 17vw, 90px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #title button { animation: none; }
+  #hud-score.hot { animation: none; }
+}

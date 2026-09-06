@@ -1,0 +1,312 @@
+/* Seven Chambers — The Masque of the Red Death
+ * Palette: velvet black #07040a and blood scarlet #ff1f1f, with each chamber's hue
+ * supplied at runtime as --hue. Type: Cinzel Decorative (display), Cormorant Garamond (body). */
+
+:root {
+  --velvet: #07040a;
+  --scarlet: #ff1f1f;
+  --bone: #f1e8d3;
+  --hue: #3d78ff;
+}
+
+[hidden] { display: none !important; }
+
+html, body { background: var(--velvet); color: var(--bone); }
+
+#gl {
+  position: fixed; inset: 0;
+  width: 100%; height: 100%;
+  display: block;
+  outline: none;
+}
+
+#ui {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  font-family: 'Cormorant Garamond', 'EB Garamond', Georgia, serif;
+  overflow: hidden;
+}
+#ui button {
+  pointer-events: auto;
+  cursor: pointer;
+  appearance: none;
+  font: 500 15px/1 'Cinzel', 'Cinzel Decorative', serif;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--bone);
+  background: rgba(7, 4, 10, 0.45);
+  border: 1px solid rgba(241, 232, 211, 0.55);
+  padding: 16px 30px 15px 34px;
+  border-radius: 2px;
+  transition: background 200ms ease, color 200ms ease, border-color 200ms ease, transform 200ms ease;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+#ui button:hover, #ui button:focus-visible {
+  background: var(--bone);
+  color: var(--velvet);
+  border-color: var(--bone);
+  transform: translateY(-1px);
+}
+
+/* ---------- overlays ---------- */
+#vignette {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(7,4,10,0.55) 80%, rgba(7,4,10,0.92) 100%);
+  opacity: 1;
+  transition: opacity 400ms ease;
+}
+#vignette.strike {
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0) 35%, rgba(120,0,0,0.35) 75%, rgba(50,0,0,0.95) 100%);
+  animation: dread 1.2s ease-in-out infinite alternate;
+}
+@keyframes dread { from { opacity: 0.75; } to { opacity: 1; } }
+
+#flash {
+  position: absolute; inset: 0;
+  background: var(--hue);
+  opacity: 0;
+  mix-blend-mode: screen;
+}
+#flash.hit { animation: flash 360ms ease-out; }
+#flash.red { animation: flashRed 900ms ease-out; }
+@keyframes flash { from { opacity: 0.55; } to { opacity: 0; } }
+@keyframes flashRed { from { opacity: 0.9; background: #ff1f1f; } to { opacity: 0; background: #ff1f1f; } }
+
+#floats { position: absolute; inset: 0; }
+#floats .float {
+  position: absolute;
+  left: 50%; top: 58%;
+  transform: translate(-50%, 0);
+  font: italic 500 clamp(18px, 2.6vw, 30px)/1 'Cormorant Garamond', serif;
+  color: var(--bone);
+  text-shadow: 0 0 18px var(--hue), 0 2px 4px rgba(0,0,0,0.8);
+  white-space: nowrap;
+  animation: rise 1.3s cubic-bezier(.2,.6,.3,1) forwards;
+}
+#floats .float.big { font-size: clamp(26px, 4vw, 48px); font-family: 'Cinzel', serif; font-style: normal; letter-spacing: 0.12em; text-transform: uppercase; }
+#floats .float.bad { color: var(--scarlet); text-shadow: 0 0 20px rgba(255,31,31,0.8); }
+@keyframes rise {
+  0%   { opacity: 0; transform: translate(-50%, 24px) scale(0.9); }
+  15%  { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -90px) scale(1.02); }
+}
+
+/* ---------- title & end screens ---------- */
+.screen {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center;
+  padding: 24px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 24px);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  gap: 14px;
+  background: linear-gradient(180deg, rgba(7,4,10,0.55) 0%, rgba(7,4,10,0.05) 30%, rgba(7,4,10,0.05) 60%, rgba(7,4,10,0.75) 100%);
+}
+#title { justify-content: flex-start; padding-top: calc(env(safe-area-inset-top, 0px) + 7vh); }
+#title .spacer { flex: 1 1 0; min-height: 6vh; }
+.screen.unused {
+  transition: opacity 700ms ease;
+}
+.screen.fade { opacity: 0; }
+
+.kicker {
+  margin: 0;
+  font: 400 clamp(11px, 1.15vw, 14px)/1.4 'Cinzel', serif;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: rgba(241, 232, 211, 0.78);
+  text-shadow: 0 1px 6px rgba(0,0,0,0.9);
+}
+
+#title h1 {
+  margin: 4px 0 0;
+  display: flex; flex-direction: column; align-items: center;
+  font-family: 'Cinzel Decorative', 'Cinzel', serif;
+  font-weight: 700;
+  font-size: clamp(54px, 11vw, 150px);
+  line-height: 0.92;
+  letter-spacing: 0.06em;
+  color: var(--bone);
+  text-shadow:
+    0 0 2px rgba(255,255,255,0.4),
+    0 0 26px rgba(255, 40, 40, 0.55),
+    0 0 70px rgba(255, 31, 31, 0.35),
+    0 6px 24px rgba(0,0,0,0.95);
+  animation: breathe 5s ease-in-out infinite alternate;
+}
+#title h1 span:last-child { font-size: 0.78em; letter-spacing: 0.16em; margin-top: 0.06em; }
+@keyframes breathe {
+  from { text-shadow: 0 0 2px rgba(255,255,255,0.4), 0 0 22px rgba(255,40,40,0.45), 0 0 60px rgba(255,31,31,0.25), 0 6px 24px rgba(0,0,0,0.95); }
+  to   { text-shadow: 0 0 3px rgba(255,255,255,0.6), 0 0 34px rgba(255,40,40,0.75), 0 0 90px rgba(255,31,31,0.5), 0 6px 24px rgba(0,0,0,0.95); }
+}
+
+.lozenges { display: flex; gap: 14px; margin: 6px 0 2px; }
+.lozenges i {
+  width: 11px; height: 11px;
+  background: var(--c);
+  transform: rotate(45deg);
+  box-shadow: 0 0 10px var(--c), 0 0 22px var(--c);
+}
+.lozenges i.black {
+  --c: #ff1f1f;
+  background: #07040a;
+  border: 1.5px solid #ff1f1f;
+  box-shadow: 0 0 10px #ff1f1f, 0 0 26px rgba(255,31,31,0.7);
+}
+
+.how {
+  margin: 6px 0 0;
+  max-width: 44ch;
+  font-size: clamp(17px, 1.7vw, 23px);
+  font-style: italic;
+  line-height: 1.35;
+  color: rgba(241, 232, 211, 0.92);
+  text-shadow: 0 1px 8px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.8);
+}
+.how b { font-style: normal; font-weight: 600; letter-spacing: 0.06em; color: #fff; }
+.best {
+  margin: 0;
+  font: 400 clamp(12px, 1.1vw, 14px)/1.4 'Cinzel', serif;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(241, 232, 211, 0.6);
+  min-height: 1.4em;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.9);
+}
+.fine {
+  margin: 0;
+  font-size: clamp(14px, 1.2vw, 17px);
+  font-style: italic;
+  color: rgba(241, 232, 211, 0.55);
+  text-shadow: 0 1px 6px rgba(0,0,0,0.9);
+}
+
+#end { background: radial-gradient(ellipse at center, rgba(7,4,10,0.35) 0%, rgba(7,4,10,0.85) 100%); }
+#end h2 {
+  margin: 0;
+  font-family: 'Cinzel Decorative', 'Cinzel', serif;
+  font-weight: 700;
+  font-size: clamp(36px, 7vw, 92px);
+  line-height: 1;
+  letter-spacing: 0.08em;
+  color: var(--bone);
+  text-shadow: 0 0 30px rgba(255,31,31,0.6), 0 6px 20px rgba(0,0,0,0.95);
+}
+#end.won h2 { text-shadow: 0 0 30px rgba(241,232,211,0.55), 0 6px 20px rgba(0,0,0,0.95); }
+#end blockquote {
+  margin: 6px 0 0;
+  max-width: 46ch;
+  font-size: clamp(18px, 2vw, 27px);
+  font-style: italic;
+  line-height: 1.35;
+  color: rgba(241, 232, 211, 0.92);
+  text-shadow: 0 1px 8px rgba(0,0,0,0.95);
+}
+#end .tally {
+  margin: 4px 0 6px;
+  font: 400 clamp(13px, 1.2vw, 16px)/1.6 'Cinzel', serif;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(241,232,211,0.75);
+}
+#end .tally b { color: #fff; font-weight: 600; }
+
+/* ---------- HUD ---------- */
+#hud { position: absolute; inset: 0; }
+.hud-top {
+  position: absolute;
+  left: calc(env(safe-area-inset-left, 0px) + 150px);
+  right: calc(env(safe-area-inset-right, 0px) + 18px);
+  top: calc(env(safe-area-inset-top, 0px) + 14px);
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 12px;
+}
+.chamber {
+  font: 400 clamp(12px, 1.2vw, 16px)/1.2 'Cinzel', serif;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--hue);
+  text-shadow: 0 0 12px var(--hue), 0 1px 3px rgba(0,0,0,0.9);
+  transition: color 500ms ease, text-shadow 500ms ease;
+}
+.grace {
+  margin-top: 8px;
+  width: min(220px, 34vw); height: 3px;
+  background: rgba(241,232,211,0.15);
+  position: relative;
+}
+.grace i {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 100%;
+  background: var(--bone);
+  box-shadow: 0 0 8px var(--hue);
+  transition: width 200ms ease;
+}
+.grace.low i { background: var(--scarlet); box-shadow: 0 0 10px var(--scarlet); }
+.score {
+  text-align: right;
+  font: 600 clamp(28px, 3.2vw, 44px)/1 'Cormorant Garamond', serif;
+  font-variant-numeric: tabular-nums;
+  color: var(--bone);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 16px rgba(0,0,0,0.7);
+}
+.score small {
+  display: block;
+  margin-top: 4px;
+  font: 400 clamp(11px, 1vw, 13px)/1 'Cinzel', serif;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(241,232,211,0.6);
+  min-height: 1em;
+}
+.strikes {
+  position: absolute;
+  left: 50%; transform: translateX(-50%);
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  font: 400 clamp(12px, 1.2vw, 15px)/1 'Cinzel', serif;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: rgba(241,232,211,0.85);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.95);
+  display: flex; gap: 10px; align-items: baseline;
+}
+.strikes .of { color: rgba(241,232,211,0.45); letter-spacing: 0.22em; font-size: 0.85em; }
+.chimes {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 9vh);
+  text-align: center;
+  color: var(--scarlet);
+}
+.chimes p {
+  margin: 0 0 12px;
+  font: 400 clamp(16px, 2.2vw, 30px)/1 'Cinzel Decorative', 'Cinzel', serif;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  text-shadow: 0 0 20px rgba(255,31,31,0.7), 0 2px 6px rgba(0,0,0,0.95);
+  animation: dread 0.8s ease-in-out infinite alternate;
+}
+.dots { display: flex; justify-content: center; gap: 9px; flex-wrap: wrap; padding: 0 20px; }
+.dots i {
+  width: 9px; height: 9px;
+  border: 1px solid rgba(255,31,31,0.7);
+  transform: rotate(45deg);
+  transition: background 120ms ease, box-shadow 120ms ease;
+}
+.dots i.rung { background: var(--scarlet); box-shadow: 0 0 10px var(--scarlet), 0 0 20px rgba(255,31,31,0.6); }
+
+/* ---------- phones ---------- */
+@media (max-width: 720px) {
+  #ui button { font-size: 13px; padding: 14px 22px 13px 26px; }
+  .hud-top { left: calc(env(safe-area-inset-left, 0px) + 14px); top: calc(env(safe-area-inset-top, 0px) + 64px); }
+  .strikes { top: calc(env(safe-area-inset-top, 0px) + 18px); left: auto; right: calc(env(safe-area-inset-right, 0px) + 16px); transform: none; }
+  .chamber { letter-spacing: 0.22em; }
+  .how { max-width: 30ch; }
+  .chimes { bottom: calc(env(safe-area-inset-bottom, 0px) + 12vh); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #title h1, .chimes p, #vignette.strike { animation: none; }
+}

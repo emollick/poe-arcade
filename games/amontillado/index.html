@@ -1,4 +1,79 @@
-<!doctype html><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>The Cask of Amontillado</title>
-<!-- PLACEHOLDER. Story: The Cask of Amontillado (games/amontillado/). Overwrite this file entirely. -->
-<body style="background:#0a0908;color:#e8e2d4;font:16px/1.6 system-ui;display:grid;place-items:center;height:100vh;margin:0"><p>The Cask of Amontillado — game pending</p>
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Cask of Amontillado — Brick by Brick</title>
+<link rel="stylesheet" href="/shared/fonts.css">
+<link rel="stylesheet" href="/shared/poe.css">
+<link rel="stylesheet" href="style.css">
+
+<!-- The catacomb: a DOM scene under perspective. Every surface is a div. -->
+<div id="stage" aria-hidden="true">
+  <div id="camera">
+    <div id="world"></div>
+  </div>
+</div>
+
+<!-- lantern: a fixed radial darkness whose transform (not its paint) moves each frame -->
+<div id="light" aria-hidden="true"></div>
+<div id="warm" aria-hidden="true"></div>
+<div id="flash" aria-hidden="true"></div>
+
+<!-- Fortunato's voice, from the dark of the niche -->
+<div id="voice" aria-live="polite"></div>
+<!-- Montresor's narration -->
+<div id="narr" aria-live="polite"></div>
+
+<div id="hud" hidden>
+  <div id="hud-top">
+    <div id="tier"><span class="k">Tier</span> <span id="tier-n">I</span> <span class="k">of XI</span></div>
+    <div id="torch" title="The torch">
+      <div id="torch-bar"><div id="torch-fill"></div></div>
+      <div id="torch-flame"></div>
+    </div>
+    <div id="chain" title="Three collapses and the chain gives">
+      <i></i><i></i><i></i>
+    </div>
+  </div>
+  <div id="hud-side">
+    <div id="score"><span class="k">Score</span><b id="score-n">0</b></div>
+    <div id="streak"><span class="k">Streak</span><b id="streak-n">0</b></div>
+  </div>
+  <div id="bar-wrap">
+    <div id="cue"></div>
+    <div id="bar">
+      <div id="bar-ticks"></div>
+      <div id="zone"></div>
+      <div id="marker"></div>
+    </div>
+    <div id="bar-hint">tap when the trowel crosses the lit stone &nbsp;·&nbsp; hold to listen</div>
+  </div>
+  <div id="listen">… listening</div>
+  <div id="force" hidden><span>FORCE IT IN</span><em>tap · tap · tap</em></div>
+  <div id="pop"></div>
+</div>
+
+<button id="mute" type="button" aria-label="Sound on/off" hidden>♪</button>
+
+<div id="title">
+  <div id="title-inner">
+    <div class="over">Edgar Allan Poe · The Cask of Amontillado</div>
+    <h1>Brick by Brick</h1>
+    <div class="rule"><i></i><b>✠</b><i></i></div>
+    <p class="how">Tap when the trowel crosses the lit stone. Hold to listen. Eleven tiers before the torch dies.</p>
+    <p class="best" id="best"></p>
+    <p class="press"><span>press to begin</span></p>
+  </div>
+</div>
+
+<div id="end" hidden>
+  <div id="end-inner">
+    <div class="over" id="end-over"></div>
+    <h2 id="end-h"></h2>
+    <p class="quote" id="end-q"></p>
+    <p class="who" id="end-who"></p>
+    <div class="tally" id="end-tally"></div>
+    <p class="press"><span id="end-press">lay it again</span></p>
+  </div>
+</div>
+
+<script type="module" src="game.js"></script>

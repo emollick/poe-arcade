@@ -1,4 +1,57 @@
-<!doctype html><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>The Masque of the Red Death</title>
-<!-- PLACEHOLDER. Story: The Masque of the Red Death (games/masque-red-death/). Overwrite this file entirely. -->
-<body style="background:#0a0908;color:#e8e2d4;font:16px/1.6 system-ui;display:grid;place-items:center;height:100vh;margin:0"><p>The Masque of the Red Death — game pending</p>
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Seven Chambers — The Masque of the Red Death</title>
+<link rel="stylesheet" href="/shared/fonts.css">
+<link rel="stylesheet" href="/shared/poe.css">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": {
+    "three": "/vendor/three/three.module.js",
+    "three/addons/": "/vendor/three/jsm/"
+} }
+</script>
+
+<canvas id="gl" aria-label="The seven chambers of Prince Prospero's abbey"></canvas>
+
+<div id="ui">
+  <div id="vignette"></div>
+  <div id="flash"></div>
+  <div id="floats"></div>
+
+  <section id="title" class="screen">
+    <p class="kicker">Edgar Allan Poe &middot; The Masque of the Red Death</p>
+    <h1><span>Seven</span><span>Chambers</span></h1>
+    <div class="lozenges" aria-hidden="true">
+      <i style="--c:#3d78ff"></i><i style="--c:#c33ce8"></i><i style="--c:#2fd970"></i>
+      <i style="--c:#ff8422"></i><i style="--c:#f6efe0"></i><i style="--c:#8a55ff"></i><i class="black"></i>
+    </div>
+    <div class="spacer"></div>
+    <p class="how" id="how"></p>
+    <p class="best" id="best"></p>
+    <button id="start" type="button">Enter the masque</button>
+    <p class="fine">Survive twelve strokes of the ebony clock.</p>
+  </section>
+
+  <section id="hud" hidden>
+    <div class="hud-top">
+      <div class="chamber"><span id="chamberName">The Blue Chamber</span><div class="grace"><i id="graceBar"></i></div></div>
+      <div class="score"><span id="score">0</span><small id="streak"></small></div>
+    </div>
+    <div class="strikes" id="strikes"><span id="strikeNum">Strike I</span><span class="of">of XII</span></div>
+    <div class="chimes" id="chimes" hidden>
+      <p id="chimeLine">The clock strikes</p>
+      <div class="dots" id="dots"></div>
+    </div>
+  </section>
+
+  <section id="end" class="screen" hidden>
+    <p class="kicker" id="endKicker"></p>
+    <h2 id="endTitle"></h2>
+    <blockquote id="endQuote"></blockquote>
+    <p class="tally" id="endScore"></p>
+    <button id="again" type="button">Again</button>
+  </section>
+</div>
+
+<script type="module" src="game.js"></script>

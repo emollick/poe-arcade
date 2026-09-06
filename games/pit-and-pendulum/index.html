@@ -1,4 +1,40 @@
-<!doctype html><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>The Pit and the Pendulum</title>
-<!-- PLACEHOLDER. Story: The Pit and the Pendulum (games/pit-and-pendulum/). Overwrite this file entirely. -->
-<body style="background:#0a0908;color:#e8e2d4;font:16px/1.6 system-ui;display:grid;place-items:center;height:100vh;margin:0"><p>The Pit and the Pendulum — game pending</p>
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Descending Blade — The Pit and the Pendulum</title>
+<link rel="stylesheet" href="/shared/fonts.css">
+<link rel="stylesheet" href="/shared/poe.css">
+<link rel="stylesheet" href="style.css">
+
+<canvas id="c" aria-label="The Descending Blade"></canvas>
+
+<div id="hud" hidden>
+  <div id="hud-time"><span id="t-now">0:00</span><small>trumpets at <span id="t-win">1:12</span></small></div>
+  <div id="hud-score"><span id="score">0</span><small id="score-lbl">score</small></div>
+</div>
+
+<div id="touch-zones" hidden aria-hidden="true">
+  <div class="zone"><span>&lsaquo;</span></div>
+  <div class="zone"><span>&#9650;</span></div>
+  <div class="zone"><span>&rsaquo;</span></div>
+</div>
+
+<div id="title" class="screen">
+  <div class="kicker">Edgar Allan Poe &middot; The Pit and the Pendulum<span class="long"> &middot; Toledo, under the Inquisition</span></div>
+  <h1><span>The</span> Descending <span>Blade</span></h1>
+  <p class="howto"><span class="keys"><b>&larr; &rarr;</b> walk &nbsp;&middot;&nbsp; <b>Space</b> hop</span><span class="touch">touch the <b>sides</b> to walk, the <b>middle</b> to hop</span></p>
+  <p class="goal">Hop the rats, time the blade, shun the pit &mdash; outlast the walls until the trumpets sound.</p>
+  <p class="best" id="best-line" hidden>Best: <span id="best-score">0</span> &middot; <span id="best-note"></span></p>
+  <button id="btn-start" class="ornate"><i>&#10087;</i> Enter the cell <i>&#10087;</i></button>
+</div>
+
+<div id="end" class="screen" hidden>
+  <div class="kicker" id="end-kicker"></div>
+  <h2 id="end-title"></h2>
+  <blockquote id="end-quote"></blockquote>
+  <div class="tally" id="end-tally"></div>
+  <button id="btn-again" class="ornate"><i>&#10087;</i> Again <i>&#10087;</i></button>
+</div>
+
+<script src="/vendor/matter/matter.min.js"></script>
+<script type="module" src="game.js"></script>
