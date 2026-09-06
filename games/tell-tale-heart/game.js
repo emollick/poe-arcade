@@ -17,6 +17,10 @@ const VEIL  = '#8fb3c9';
 const LAMP  = '#e9cf98';      // the lantern's light on the boards
 
 const DUR = 76;               // seconds of game time to dawn
+const FIRST_BEAT = 0.9;       // seconds from the start to the first beat
+const BPM0 = 54, BPM_RISE = 98;
+const INTRO_BEATS = 6;        // the tempo holds flat this long so the player can settle on it
+const INTRO_U = (FIRST_BEAT + INTRO_BEATS * 60 / BPM0) / DUR;   // ~0.10 of the night
 const GOOD    = 0.15;         // seconds either side of the beat
 const BEST_KEY = 'tell-tale-heart:best';
 
@@ -200,7 +204,13 @@ function planWindows() {
   return w;
 }
 
-function bpmAt(u) { return 54 + 98 * Math.pow(Math.max(0, u), 1.2); }
+/* The heart holds at 54 BPM for the first six beats (a settling intro), then
+ * climbs on the same curve, compressed into the remaining night so dawn still
+ * arrives at the same tempo and the same second. */
+function bpmAt(u) {
+  const c = Math.max(0, (u - INTRO_U) / (1 - INTRO_U));
+  return BPM0 + BPM_RISE * Math.pow(c, 1.2);
+}
 /* The perfect window. A first night is ±90 ms, easing to ±80 ms by dawn; once
  * a score is on the books it is ±75 ms all night. Fair, not easy. */
 function perfectWindow(u) { return best.score ? 0.075 : lerp(0.09, 0.08, clamp01(u)); }
@@ -214,7 +224,7 @@ function startGame() {
   const now = heart.now;
   Object.assign(G, {
     state: 'play', startAt: now, t: 0, u: 0, composure: 1, score: 0, streak: 0, bestStreak: 0,
-    beatsHit: 0, perfects: 0, misses: 0, tells: 0, beats: [], nextBeat: now + 0.9, lastBeat: now + 0.9,
+    beatsHit: 0, perfects: 0, misses: 0, tells: 0, beats: [], nextBeat: now + FIRST_BEAT, lastBeat: now + FIRST_BEAT,
     lastInterval: 60 / bpmAt(0), nextTick: now + 0.4, tickN: 0, nextChatter: now + 2.5,
     windows: planWindows(), win: null, warn: 0, endAt: 0, finalBeatAt: 0, judgments: [], shocks: [],
     caption: null, captionIdx: 0, officers: [1, 1, 1], flash: 0, relax: 0, heard: now, shadowX: [0, 0, 0],
@@ -552,7 +562,11 @@ const mix = (h1, h2, t) => {
   const r = Math.round(lerp(c(h1, 1), c(h2, 1), t)), g = Math.round(lerp(c(h1, 3), c(h2, 3), t)), b = Math.round(lerp(c(h1, 5), c(h2, 5), t));
   return `rgb(${r},${g},${b})`;
 };
-const font = (size, sc, italic) => `${italic ? 'italic ' : ''}${size}px ${sc ? "'IM Fell English SC'" : "'IM Fell English'"}, 'IM Fell English', Georgia, serif`;
+const font = (size, sc, italic, lining) => lining
+  // IM Fell's figures are old-style, so a lone 0 renders as a small ring; the
+  // score digits use Cinzel, which has lining figures at the same weight
+  ? `600 ${size}px 'Cinzel', 'IM Fell English SC', Georgia, serif`
+  : `${italic ? 'italic ' : ''}${size}px ${sc ? "'IM Fell English SC'" : "'IM Fell English'"}, 'IM Fell English', Georgia, serif`;
 
 let frameSeed = 0;
 function jitter(amount) {
@@ -565,7 +579,7 @@ function shuddered(text, x, y, size, opts = {}) {
   const amp = opts.amp != null ? opts.amp : V.env;
   const k = (opts.k != null ? opts.k : 3) * (reduceMotion ? 0.3 : 1);
   const dx = jitter(amp * k), dy = jitter(amp * k * 0.6);
-  cx.font = font(size, opts.sc, opts.italic);
+  cx.font = font(size, opts.sc, opts.italic, opts.lining);
   cx.textAlign = opts.align || 'center';
   cx.textBaseline = opts.baseline || 'middle';
   cx.fillStyle = opts.color || BONE;
@@ -997,15 +1011,16 @@ function drawMeter() {
 function drawHUD() {
   const m = L.m;
   const right = W - (m ? 18 : 36), top = m ? 56 : 30;
-  // IM Fell's figures are old-style (x-height digits), so the block runs a
-  // little larger than a lining face would need to read at a glance
-  const scoreSz = m ? 30 : 36, lineSz = m ? 14 : 16;
+  // the score is set in Cinzel (lining figures); its caps sit where IM Fell
+  // SC's 36px small caps did, so the block keeps its footprint
+  const scoreSz = m ? 25 : 30, lineSz = m ? 14 : 16;
   const ink80 = rgba(BONE, 0.8);
-  shuddered(fmt(G.score), right, top + scoreSz * 0.55, scoreSz, { sc: true, align: 'right', color: ink80, k: 1.2 });
-  shuddered(best.score ? `best ${fmt(best.score)}` : 'first night', right, top + scoreSz * 0.55 + lineSz * 1.9, lineSz, { align: 'right', italic: true, color: ink80, k: 0.5 });
+  const scoreY = top + (m ? 16.5 : 19.8);
+  shuddered(fmt(G.score), right, scoreY, scoreSz, { lining: true, align: 'right', color: ink80, k: 1.2 });
+  shuddered(best.score ? `best ${fmt(best.score)}` : 'first night', right, scoreY + lineSz * 1.9, lineSz, { align: 'right', italic: true, color: ink80, k: 0.5 });
   // hour: the night wears on
   const pct = Math.round(G.u * 100);
-  shuddered(`${pct}% to dawn`, right, top + scoreSz * 0.55 + lineSz * 3.5, lineSz, { align: 'right', sc: true, color: ink80, k: 0.5 });
+  shuddered(`${pct}% to dawn`, right, scoreY + lineSz * 3.5, lineSz, { align: 'right', sc: true, color: ink80, k: 0.5 });
 
   // caption: over the boards on desktop; on a phone it sits with the officers
   if (G.caption) {
@@ -1226,6 +1241,7 @@ function loop(ts) {
   try {
     await Promise.all([
       document.fonts.load("100px 'IM Fell English SC'"),
+      document.fonts.load("600 30px 'Cinzel'"),
       document.fonts.load("20px 'IM Fell English'"),
       document.fonts.load("italic 20px 'IM Fell English'"),
     ]);
