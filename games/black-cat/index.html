@@ -26,27 +26,6 @@
     <button id="btn-breath" class="ledge-btn" type="button"><span>HOLD BREATH</span><small>space</small></button>
   </div>
 
-  <svg id="trowel" viewBox="0 0 160 120" aria-label="Trowel load">
-    <defs>
-      <clipPath id="blade-clip"><path d="M8 46 L110 30 L128 42 L110 100 L20 96 Z"/></clipPath>
-      <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#9c948a"/><stop offset=".5" stop-color="#5b554e"/><stop offset="1" stop-color="#3a3531"/>
-      </linearGradient>
-      <linearGradient id="wood" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0" stop-color="#5a3a24"/><stop offset=".5" stop-color="#8a5a34"/><stop offset="1" stop-color="#3f2716"/>
-      </linearGradient>
-    </defs>
-    <!-- blade -->
-    <path d="M8 46 L110 30 L128 42 L110 100 L20 96 Z" fill="url(#steel)" stroke="#1c1917" stroke-width="1.5"/>
-    <!-- plaster load, clipped to the blade; JS scales it -->
-    <g clip-path="url(#blade-clip)">
-      <rect id="load" x="0" y="100" width="160" height="100" fill="#e9dfc9"/>
-      <rect id="load-lip" x="0" y="99" width="160" height="3" fill="#fbf5e6" opacity=".8"/>
-    </g>
-    <!-- neck + handle -->
-    <path d="M118 40 C 132 34, 138 26, 140 20" fill="none" stroke="#2a2623" stroke-width="5" stroke-linecap="round"/>
-    <rect x="100" y="6" width="56" height="16" rx="7" transform="rotate(-24 128 14)" fill="url(#wood)" stroke="#1c1917" stroke-width="1.2"/>
-  </svg>
 </div>
 
 <!-- ============ title ============ -->

@@ -99,15 +99,21 @@ await page.evaluate(() => {
   const bot = () => {
     if (__poe.state !== 'play') return;
     const g = __poe.grid, G = __poe.G;
-    // look for the worst spot among samples inside the cat's neighbourhood
-    const c = __poe.cat();
-    let bx = 0, by = 0, bs = 0;
-    for (let i = 0; i < 60; i++) {
+    const c = __poe.cat(), e = __poe.eye();
+    const L = G.lantern;
+    const lx = L.x * g.cell, ly = L.y * g.cell, lr = L.r * g.cell;
+    const lit = L.s > 0.3;
+    // the eye first: it is what an officer sees; then the worst spot, weighted toward the beam
+    let bx = e.x, by = e.y, bs = __poe.showAt(e.x, e.y) * 2.2;
+    for (let i = 0; i < 70; i++) {
       const x = c.x + (Math.random() - 0.5) * c.s * 0.95, y = c.y + (Math.random() - 0.5) * c.s * 0.95;
-      const s = __poe.showAt(x, y);
+      let s = __poe.showAt(x, y);
+      if (lit) { const d = Math.hypot(x - lx, y - ly) / lr; s *= d < 1.4 ? 1.5 : 0.7; }
       if (s > bs) { bs = s; bx = x; by = y; }
     }
-    if (bs > 0.08 && G.bucket > 0.05) {
+    // plaster is dear: spend it on what shows, and hold some back when the pail runs low
+    const need = G.bucket > 0.45 ? 0.14 : 0.3;
+    if (bs > need && G.bucket > 0.04) {
       // a short stroke through the spot
       __poe.release();
       const r = g.cell * Math.min(g.w, g.h) * 0.055;
@@ -119,6 +125,15 @@ await page.evaluate(() => {
 });
 await page.evaluate(() => __poe.setTimeScale(3));
 const t1 = Date.now();
+if (process.env.BOT_TRACE) {
+  // BOT_TRACE=1: a line per game second while the bot plays
+  let lastT = -1;
+  while (await page.evaluate(() => __poe.state === 'play')) {
+    const r = await page.evaluate(() => ({ t: __poe.G.t, s: __poe.G.sweep, ph: __poe.G.phase, susp: __poe.G.susp, vis: __poe.visibility(), b: __poe.G.bucket, eye: __poe.eyeShow(), tot: __poe.total(), p: __poe.visParts() }));
+    if (Math.floor(r.t) !== lastT) { lastT = Math.floor(r.t); console.log(`  ${r.t.toFixed(0).padStart(3)}s S${r.s + 1} ${r.ph.padEnd(5)} susp ${r.susp.toFixed(2)} vis ${r.vis.toFixed(2)} bucket ${r.b.toFixed(2)} eye ${r.eye.toFixed(2)} total ${r.tot.toFixed(2)} | raw ${r.p.raw.toFixed(2)} eyeV ${r.p.eye.toFixed(2)} lump ${r.p.lump.toFixed(2)}`); }
+    await sleep(60);
+  }
+}
 await page.waitForFunction(() => __poe.state !== 'play', null, { timeout: 120000 });
 const r2 = await page.evaluate(() => ({ state: __poe.state, t: __poe.G.t.toFixed(1), sweep: __poe.G.sweep, score: __poe.G.score, unseen: __poe.G.unseen.toFixed(1), clean: __poe.G.cleanSweeps }));
 console.log('run 2 (bot):', r2, `(${((Date.now() - t1) / 1000).toFixed(1)}s wall)`);

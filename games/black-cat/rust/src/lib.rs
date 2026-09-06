@@ -78,6 +78,8 @@ static mut LY: f32 = 0.0;
 static mut LR: f32 = 1.0;
 static mut LS: f32 = 0.0;
 static mut VIS_BEAM: f32 = 0.0;
+static mut VIS_EYE: f32 = 0.0;
+static mut VIS_LUMP: f32 = 0.0;
 static mut VIS_TOTAL: f32 = 0.0;
 static mut CAT_CX: f32 = 0.0;
 static mut CAT_CY: f32 = 0.0;
@@ -89,6 +91,7 @@ static mut EAR_X: f32 = 0.0;
 static mut EAR_Y: f32 = 0.0;
 static mut EYE_IDX: usize = 0;
 static mut EYE_R: f32 = 1.0;
+static mut LID: f32 = 1.0; // 1 = eye fully open, 0 = lid closed over it (title breathing)
 
 // ---------------------------------------------------------------- helpers
 #[inline]
@@ -209,8 +212,10 @@ unsafe fn moist_nxt() -> *mut f32 {
 
 // ---------------------------------------------------------------- exports
 
+/// Build the wall. `cxf`/`cyf` place the cat as fractions of the grid (the title poster
+/// puts it in the empty right half); pass 0 for the play pose.
 #[no_mangle]
-pub unsafe extern "C" fn init(w: u32, h: u32, seed: u32) -> u32 {
+pub unsafe extern "C" fn init(w: u32, h: u32, seed: u32, cxf: f32, cyf: f32) -> u32 {
     let mut w = w as usize;
     let mut h = h as usize;
     if w < 8 { w = 8; }
@@ -232,7 +237,9 @@ pub unsafe extern "C" fn init(w: u32, h: u32, seed: u32) -> u32 {
     AMBIENT = 1.0;
     LS = 0.0;
     LX = -1e9;
+    LID = 1.0;
     VIS_BEAM = 0.0;
+    VIS_EYE = 0.0;
     VIS_TOTAL = 0.0;
     MOIST_CUR = false;
     for wk in WALK.iter_mut() { *wk = DEAD; }
@@ -247,8 +254,8 @@ pub unsafe extern "C" fn init(w: u32, h: u32, seed: u32) -> u32 {
 
     // ---- pose, varied a little per seed
     let j = |k: u32| hash2(k as i32, 17, seed) * 2.0 - 1.0;
-    let cx = wf * 0.5 + j(1) * wf * 0.05;
-    let cy = hf * 0.52 + j(2) * hf * 0.03;
+    let cx = if cxf > 0.0 { wf * cxf } else { wf * 0.5 + j(1) * wf * 0.05 };
+    let cy = if cyf > 0.0 { hf * cyf } else { hf * 0.52 + j(2) * hf * 0.03 };
     CAT_CX = cx;
     CAT_CY = cy;
     let side = if hash2(3, 3, seed) > 0.5 { 1.0 } else { -1.0 };
@@ -377,6 +384,13 @@ pub unsafe extern "C" fn pixels_ptr() -> u32 { PIX.as_ptr() as u32 }
 pub unsafe extern "C" fn visibility() -> f32 { VIS_BEAM }
 #[no_mangle]
 pub unsafe extern "C" fn total_visibility() -> f32 { VIS_TOTAL }
+/// How much of the eye alone shows under the beam, on the same scale as `visibility()`. The
+/// eye is a few dozen cells but it is what an officer sees first; the game weights it per sweep.
+#[no_mangle]
+pub unsafe extern "C" fn eye_visibility() -> f32 { VIS_EYE }
+/// The share of `visibility()` that comes from heavy, lumpy plaster (for tuning).
+#[no_mangle]
+pub unsafe extern "C" fn lump_visibility() -> f32 { VIS_LUMP }
 #[no_mangle]
 pub unsafe extern "C" fn eye_x() -> f32 { EYE_X }
 #[no_mangle]
@@ -391,6 +405,11 @@ pub unsafe extern "C" fn cat_size() -> f32 { CAT_S }
 pub unsafe extern "C" fn ear_x() -> f32 { EAR_X }
 #[no_mangle]
 pub unsafe extern "C" fn ear_y() -> f32 { EAR_Y }
+#[no_mangle]
+pub unsafe extern "C" fn eye_r() -> f32 { EYE_R }
+/// Eyelid, 1 = open. Only the title uses it (the eye breathes on an ~8 s cycle).
+#[no_mangle]
+pub unsafe extern "C" fn set_lid(l: f32) { LID = clamp01(l); }
 
 #[no_mangle]
 pub unsafe extern "C" fn set_lantern(x: f32, y: f32, r: f32, strength: f32) {
@@ -608,7 +627,8 @@ pub unsafe extern "C" fn plaster(x: f32, y: f32, radius: f32, amount: f32) -> f3
             let i = (yy * w + xx) as usize;
             let t = THICK[i];
             THICK[i] = (t + k * 0.6).min(2.6);
-            let cover = (k * 1.6).min(1.0);
+            // one honest pass covers: the pail is dear, so each stroke has to count
+            let cover = (k * 2.4).min(1.0);
             *cur.add(i) *= 1.0 - 0.9 * cover;
             CRACK[i] *= 1.0 - 0.92 * cover;
             FRESH[i] = (FRESH[i] + cover).min(1.0);
@@ -648,53 +668,115 @@ pub unsafe extern "C" fn rap(x: f32, y: f32, strength: f32) {
     }
 }
 
-/// Dress the wall for the title frame: eye faintly through, one hairline along an ear.
+/// Damp around a point (gaussian, radius as a fraction of the cat size), stronger on the outline.
+unsafe fn damp_blob(px: f32, py: f32, rad: f32, amount: f32) {
+    let w = W;
+    let cur = moist_cur();
+    let r = CAT_S * rad;
+    let x0 = ((px - 3.0 * r).floor() as i32).max(0) as usize;
+    let x1 = ((px + 3.0 * r).ceil() as i32).min(w as i32 - 1) as usize;
+    let y0 = ((py - 3.0 * r).floor() as i32).max(0) as usize;
+    let y1 = ((py + 3.0 * r).ceil() as i32).min(H as i32 - 1) as usize;
+    for y in y0..=y1 {
+        for x in x0..=x1 {
+            let i = y * w + x;
+            let dx = x as f32 - px;
+            let dy = y as f32 - py;
+            let dd = (dx * dx + dy * dy).sqrt() / r;
+            let k = (-(dd * dd)).exp();
+            if k < 3e-3 { continue; }
+            *cur.add(i) += k * amount * (0.6 + 0.4 * EDGE[i]);
+        }
+    }
+}
+
+/// The outline cell nearest a point.
+unsafe fn nearest_edge(px: f32, py: f32) -> usize {
+    let w = W;
+    let mut best = usize::MAX;
+    let mut bd = 1e9f32;
+    for k in 0..EDGE_COUNT {
+        let i = EDGE_LIST[k] as usize;
+        let dx = (i % w) as f32 - px;
+        let dy = (i / w) as f32 - py;
+        let dd = dx * dx + dy * dy;
+        if dd < bd { bd = dd; best = i; }
+    }
+    best
+}
+
+/// Run every live walker to the end of its life right now (a crack that is already there).
+unsafe fn settle_walkers(jitter: f32) {
+    for wk in WALK.iter_mut() {
+        if wk.active {
+            let mut steps = 0;
+            while wk.active && steps < 600 {
+                walker_step(wk, jitter, 0.0);
+                steps += 1;
+            }
+        }
+    }
+}
+
+/// Dress the wall for a new game: the damp has already had its four days. The eye bleeds
+/// faintly through thin plaster, one ear is damp with a hairline along it, and the whole
+/// body carries a head start of moisture so the lantern has something to find in sweep I.
+#[no_mangle]
+pub unsafe extern "C" fn start_dress() {
+    let w = W;
+    if w == 0 { return; }
+    let cur = moist_cur();
+    for i in 0..N {
+        let e = EYE[i];
+        if e > 0.0 { THICK[i] = lerp(THICK[i], 0.28, e); }
+        // a head start on the seep, uneven so it blooms in patches
+        let nv = fbm((i % w) as f32 * 0.05 / REL, (i / w) as f32 * 0.05 / REL, SEED ^ 0x1234, 2) * 0.5 + 0.5;
+        *cur.add(i) += SRC[i] * (0.28 + 0.42 * nv);
+    }
+    damp_blob(EAR_X, EAR_Y, 0.11, 0.6);
+    damp_blob(EYE_X, EYE_Y, 0.09, 0.35);
+    let best = nearest_edge(EAR_X, EAR_Y);
+    if best != usize::MAX {
+        spawn_walker(best, w, ((30.0 + CAT_S * 0.16) * REL) as i32);
+        settle_walkers(0.3);
+    }
+}
+
+/// Dress the wall for the title poster: the between-sweeps state. The body stands proud of
+/// the wall in low relief, the damp has bloomed over it, hairlines trace the outline and
+/// the eye is through.
 #[no_mangle]
 pub unsafe extern "C" fn title_dress() {
     let w = W;
     if w == 0 { return; }
     EYE_FORCE = 0.0;
     EYE_P = 0.42;
-    // thin the plaster over the eye so it bleeds faintly through
-    for i in 0..N {
-        if EYE[i] > 0.0 { THICK[i] -= EYE[i] * 0.3; }
-    }
-    // a little damp around the head and the ear tip
     let cur = moist_cur();
-    let ex = EAR_X;
-    let ey = EAR_Y;
-    for y in 0..H {
-        for x in 0..w {
-            let i = y * w + x;
-            let dx = x as f32 - ex;
-            let dy = y as f32 - ey;
-            let dd = (dx * dx + dy * dy).sqrt() / (CAT_S * 0.12);
-            let k = (-(dd * dd)).exp();
-            *cur.add(i) += k * 0.45 * (0.6 + 0.4 * EDGE[i]);
+    for i in 0..N {
+        let cat = CAT[i];
+        // low relief: the shape is a little proud of the wall
+        THICK[i] += cat * 0.42;
+        let e = EYE[i];
+        if e > 0.0 { THICK[i] = lerp(THICK[i], 0.3, e); }
+        let nv = fbm((i % w) as f32 * 0.05 / REL, (i / w) as f32 * 0.05 / REL, SEED ^ 0x1234, 2) * 0.5 + 0.5;
+        *cur.add(i) += SRC[i] * (0.5 + 0.7 * nv);
+    }
+    damp_blob(EAR_X, EAR_Y, 0.12, 0.5);
+    damp_blob(EYE_X, EYE_Y, 0.10, 0.3);
+    // hairlines around the outline: one from the ear tip, the rest spaced around the edge
+    let best = nearest_edge(EAR_X, EAR_Y);
+    if best != usize::MAX { spawn_walker(best, w, ((40.0 + CAT_S * 0.22) * REL) as i32); }
+    let n = 11;
+    for k in 0..n {
+        let ang = k as f32 / n as f32 * 2.0 * PI + 0.4;
+        let px = CAT_CX + ang.cos() * CAT_S * 0.24;
+        let py = CAT_CY + ang.sin() * CAT_S * 0.30;
+        let i = nearest_edge(px, py);
+        if i != usize::MAX && rnd() < 0.8 {
+            spawn_walker(i, w, ((16.0 + rnd() * 36.0 + CAT_S * 0.06) * REL) as i32);
         }
     }
-    // the crack: start on the ear boundary near the tip and walk it
-    let mut best = usize::MAX;
-    let mut bd = 1e9f32;
-    for k in 0..EDGE_COUNT {
-        let i = EDGE_LIST[k] as usize;
-        let dx = (i % w) as f32 - ex;
-        let dy = (i / w) as f32 - ey;
-        let dd = dx * dx + dy * dy;
-        if dd < bd { bd = dd; best = i; }
-    }
-    if best != usize::MAX {
-        spawn_walker(best, w, 40 + (CAT_S * 0.22) as i32);
-        for wk in WALK.iter_mut() {
-            if wk.active {
-                let mut steps = 0;
-                while wk.active && steps < 400 {
-                    walker_step(wk, 0.3, 0.0);
-                    steps += 1;
-                }
-            }
-        }
-    }
+    settle_walkers(0.3);
 }
 
 #[inline]
@@ -718,10 +800,16 @@ pub unsafe extern "C" fn render() {
     // eye core brightness (drives the halo)
     let t_eye = THICK[EYE_IDX];
     let core = clamp01((eye_p + 0.45 - t_eye) * 1.3).max(eye_force);
-    let core = core.max(reveal);
+    let core = core.max(reveal) * (0.15 + 0.85 * LID);
     let flick = 1.0 + 0.05 * (TIME * 9.0).sin() * (TIME * 2.3).cos();
+    // eyelid: cells above this row are covered when the lid is down (1.5-cell soft edge)
+    let lid = LID;
+    let lid_y = EYE_Y + EYE_R * (1.5 - 3.0 * lid);
+    let lid_soft = 1.0 / (1.5 * rel.max(0.4));
 
     let mut sum_show_b = 0.0f32;
+    let mut sum_eye_b = 0.0f32;
+    let mut sum_lump_b = 0.0f32;
     let mut sum_cat_b = 0.0f32;
     let mut sum_b = 0.0f32;
     let mut sum_show_c = 0.0f32;
@@ -741,8 +829,13 @@ pub unsafe extern "C" fn render() {
             let c = CRACK[i];
             let g = GRAIN[i];
             let f = FRESH[i];
-            let e = EYE[i];
-            let ha = HALO[i];
+            let mut e = EYE[i];
+            let mut ha = HALO[i];
+            if lid < 1.0 && (e > 0.0 || ha > 0.0) {
+                let k = clamp01((y as f32 + 0.5 - lid_y) * lid_soft + 0.5);
+                e *= k;
+                ha *= 0.4 + 0.6 * k;
+            }
             let cat = CAT[i];
 
             let wet = m / (0.25 + 0.75 * t);
@@ -795,6 +888,11 @@ pub unsafe extern "C" fn render() {
             // the eye is emissive: it does not need the lantern
             let glow = eyeshow * 0.9 + ha * core * core * (0.3 + 0.7 * eye_force);
             if glow > 0.0 {
+                // the eye is its own light: never let an overexposed patch of lantern-lit plaster
+                // wash it into a pale disc (the "glass bead" under the beam)
+                if or > 255.0 { or = 255.0; }
+                if og > 255.0 { og = 255.0; }
+                if ob > 255.0 { ob = 255.0; }
                 // iris: brighter toward the pupil, darker at the rim
                 let ex = x as f32 + 0.5 - EYE_X;
                 let ey = y as f32 + 0.5 - EYE_Y;
@@ -812,11 +910,12 @@ pub unsafe extern "C" fn render() {
                 or = lerp(or, ir, gk) + 20.0 * glow * eyeshow;
                 og = lerp(og, ig, gk) + 16.0 * glow * eyeshow;
                 ob = lerp(ob, ib, gk);
-                let pk = pupil * eyeshow;
+                // the pupil reads as soon as the iris does, so a half-through eye is still an eye
+                let pk = pupil * clamp01(eyeshow * 2.2);
                 or = lerp(or, 10.0, pk); og = lerp(og, 9.0, pk); ob = lerp(ob, 7.0, pk);
-                // glint
+                // glint, only once the eye is well through
                 let gx = ex + EYE_R * 0.38; let gy = ey + EYE_R * 0.40;
-                let gl = clamp01(1.0 - (gx * gx + gy * gy) / (EYE_R * EYE_R * 0.05)) * eyeshow * 0.8;
+                let gl = clamp01(1.0 - (gx * gx + gy * gy) / (EYE_R * EYE_R * 0.05)) * eyeshow * 0.8 * smooth(0.3, 0.75, eyeshow);
                 or += 90.0 * gl; og += 90.0 * gl; ob += 70.0 * gl;
             }
             let o = i * 4;
@@ -826,11 +925,14 @@ pub unsafe extern "C" fn render() {
             PIX[o + 3] = 255;
 
             // ---- visibility bookkeeping
-            let show = (stain * stain * 1.4).max(c * 0.75).max(eyeshow * 1.6).min(1.0) + lumpf * shade.abs() * 0.7;
+            let lump_show = lumpf * shade.abs() * 0.5;
+            let show = (stain * stain * 1.4).max(c * 0.75).max(eyeshow * 1.6).min(1.0) + lump_show;
             let catish = cat.max(EDGE[i]).max(ha);
             let bw = if q < 1.0 { (1.0 - q) * (1.0 - q) } else { 0.0 };
             sum_b += bw;
             sum_show_b += show * bw;
+            sum_eye_b += eyeshow * bw;
+            sum_lump_b += lump_show * bw;
             sum_cat_b += catish * bw;
             sum_show_c += show * catish;
             sum_c += catish;
@@ -841,7 +943,9 @@ pub unsafe extern "C" fn render() {
         // beam, floored by a slice of the beam and by a slice of the WHOLE cat so that a few
         // marks on a narrow part (the ears) do not read as a full reveal
         let denom = (sum_cat_b * 0.85).max(sum_b * 0.10).max(sum_c * 0.12);
+        VIS_EYE = (sum_eye_b / denom).min(1.0);
+        VIS_LUMP = (sum_lump_b / denom).min(1.0);
         (sum_show_b / denom).min(1.0)
-    } else { 0.0 };
+    } else { VIS_EYE = 0.0; VIS_LUMP = 0.0; 0.0 };
     VIS_TOTAL = if sum_c > 0.0 { (sum_show_c / sum_c).min(1.0) } else { 0.0 };
 }

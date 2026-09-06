@@ -56,14 +56,17 @@ function makeGrain() {
   grainPattern = ctx.createPattern(c, 'repeat');
 }
 
-function setupGrid(seed) {
+// The title is a poster: the cat sits in the empty right half on desktop, above the type on phones.
+const titlePose = () => (H > W ? { cx: 0.5, cy: 0.27 } : { cx: 0.68, cy: 0.46 });
+
+function setupGrid(seed, pose) {
   portrait = H > W;
   // ~2.8 CSS px per cell on desktop, ~2 on phones, capped at 512x512 cells total
   let cell = W >= 1000 ? W / 512 : (W >= 700 ? W / 360 : 2);
   let w = Math.round(W / cell), h = Math.round(H / cell);
   while (w * h > 512 * 512) { cell *= 1.1; w = Math.round(W / cell); h = Math.round(H / cell); }
   grid.cell = cell;
-  grid.ptr = sim.init(w, h, seed >>> 0);
+  grid.ptr = sim.init(w, h, seed >>> 0, pose ? pose.cx : 0, pose ? pose.cy : 0);
   grid.w = sim.width(); grid.h = sim.height();
   grid.view = null;
   grid.off = document.createElement('canvas');
@@ -88,7 +91,7 @@ const G = {
   u: -0.2,            // beam position along its axis
   pauses: [],
   pauseLeft: 0,
-  rapPending: 0,
+  rapPending: 0, lookBack: 0,
   breath: 0, breathCd: 0,
   lantern: { x: -1e9, y: 0, r: 100, s: 0, target: 0 },
   bucket: 1, spent: 0,
@@ -96,10 +99,21 @@ const G = {
   ambient: 1, eyeOpen: 0, reveal: 0, endT: 0,
   score: 0,
 };
-const SWEEP_DUR = [12, 11, 10, 9];
-const SWEEP_GAP = [4.2, 5, 4.5, 4];
+const SWEEP_DUR = [14, 11, 10, 9];
+const SWEEP_GAP = [2.5, 5, 4.5, 4];
 const PAUSE_N = [2, 2, 3, 3];
 const PAUSE_LEN = [1.2, 1.5, 1.8, 2.2];
+// how much of the cat may show under the beam before attention climbs; sweep I is the
+// sharpest look because the eye is already through when the lantern arrives
+const VIS_THRESHOLD = [0.06, 0.10, 0.12, 0.12];
+// the eye is a few dozen cells but it is what an officer sees first: in the early sweeps an
+// open eye under the beam is a find on its own; later the wall as a whole carries the search
+const EYE_WEIGHT = [9, 6, 2.5, 2];
+// how fast attention climbs per unit of visibility over the threshold; III and IV are as they were
+const SUSP_GAIN = [0.8, 0.8, 1.05, 1.3];
+// one narrow stroke across the cat spends ~60% of the bucket; the wide trowel is a gamble
+const STROKE_COST = 0.072;
+const BUCKET_REFILL = 0.23; // per second; a full pail again in ~4.3 s
 
 const ROMAN = ['I', 'II', 'III', 'IV'];
 let best = loadState(BEST_KEY, null);
@@ -114,7 +128,18 @@ function dressTitle() {
   sim.set_ambient(1);
   sim.set_eye(0);
   sim.set_reveal(0);
+  sim.set_lid(0);
   G.lantern.s = 0.9;
+  titleT = 0;
+}
+// the eye on the poster: opens over ~2.5 s, holds, closes, rests — an 8 s cycle
+function titleLid(t) {
+  const ss = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+  const ph = (t % 8) / 8;
+  if (ph < 0.32) return ss(ph / 0.32);
+  if (ph < 0.62) return 1;
+  if (ph < 0.86) return 1 - ss((ph - 0.62) / 0.24);
+  return 0;
 }
 
 function planSweep(k) {
@@ -127,10 +152,12 @@ function planSweep(k) {
 
 function startGame() {
   G.seed = (Math.random() * 0xffffffff) >>> 0;
-  setupGrid(G.seed);
+  setupGrid(G.seed, null);
+  sim.start_dress();
+  sim.set_lid(1);
   Object.assign(G, {
     state: 'play', t: 0, difficulty: 0, susp: 0, suspMaxSweep: 0, warned: false,
-    sweep: 0, phase: 'wait', phaseT: 0, u: -0.2, pauseLeft: 0, rapPending: 0,
+    sweep: 0, phase: 'wait', phaseT: 0, u: -0.2, pauseLeft: 0, rapPending: 0, lookBack: 0,
     breath: 0, breathCd: 0, bucket: 1, spent: 0, unseen: 0, streak: 0, maxStreak: 0,
     cleanSweeps: 0, bonus: 0, ambient: 1, eyeOpen: 0, reveal: 0, endT: 0, score: 0,
   });
@@ -204,9 +231,9 @@ function paintTo(x, y, first) {
   const steps = first ? 1 : Math.max(1, Math.ceil(dist / (r * 0.35)));
   const wide = isWide();
   const perStep = (first ? 0.32 : 0.16) * (wide ? 1.15 : 1);
-  const cost = perStep * (wide ? 3.0 : 1.0) * 0.024;
+  const cost = perStep * (wide ? 3.0 : 1.0) * STROKE_COST;
   for (let i = 1; i <= steps; i++) {
-    if (G.bucket <= 0) { $('trowel').classList.add('empty'); break; }
+    if (G.bucket <= 0) { bucketShake = 0.45; break; }
     const px = last.x + dx * (i / steps), py = last.y + dy * (i / steps);
     sim.plaster(px, py, r, perStep);
     G.bucket = Math.max(0, G.bucket - cost);
@@ -254,6 +281,9 @@ function holdBreath() {
 }
 
 // ---------------------------------------------------------------- the officers
+// where along the sweep axis the eye sits
+const eyeU = () => (portrait ? (sim.eye_y() / grid.h - 0.06) / 0.86 : sim.eye_x() / grid.w);
+
 function beamAxis() {
   // returns {x, y} in grid cells for position u along the sweep axis
   const wob = reduced ? 0 : Math.sin(G.t * 0.9) * 0.10 + Math.sin(G.t * 0.37 + 1) * 0.06;
@@ -277,9 +307,14 @@ function updateOfficers(dt) {
   } else if (G.phase === 'sweep') {
     L.target = 1;
     // portrait sweeps run along the cat's height, so they move faster to expose it for the same time
-    const speed = 1.36 / SWEEP_DUR[k] * (portrait ? 1.35 : 1);
+    const speed = 1.36 / SWEEP_DUR[k] * (portrait ? 1.2 : 1);
     if (G.pauseLeft > 0) {
       G.pauseLeft -= dt;
+      if (G.lookBack > 0) {
+        // he frowned: the lantern comes back to what he thought he saw
+        G.lookBack -= dt;
+        G.u += (eyeU() - G.u) * Math.min(1, dt * 2.5);
+      }
       if (G.rapPending > 0) {
         G.rapPending -= dt;
         if (G.rapPending <= 0) doRap(0.7 + 0.15 * k);
@@ -313,7 +348,7 @@ function updateOfficers(dt) {
   // lantern position + strength
   const p = beamAxis();
   L.x = p.x; L.y = p.y;
-  L.r = Math.min(grid.w, grid.h) * (0.30 + 0.035 * k);
+  L.r = Math.min(grid.w, grid.h) * (0.30 + 0.035 * k) * (portrait ? 1.25 : 1);
   const rate = dt * 2.2;
   L.s += (L.target - L.s) * Math.min(1, rate);
   const flick = reduced ? 1 : 1 + 0.05 * Math.sin(G.t * 23) * Math.sin(G.t * 7.3);
@@ -330,16 +365,22 @@ function doRap(strength) {
 
 function updateSuspicion(dt) {
   const L = G.lantern;
-  const vis = L.s > 0.4 ? sim.visibility() : 0;
   const k = G.sweep;
+  const vis = L.s > 0.4 ? Math.min(1, sim.visibility() + sim.eye_visibility() * EYE_WEIGHT[k]) : 0;
+  G.vis = vis;
   const closer = G.pauseLeft > 0 ? 1.3 : 1;
-  if (vis > 0.12) G.susp += (vis - 0.12) * (0.55 + 0.25 * k) * closer * dt;
+  const thr = VIS_THRESHOLD[k];
+  // the climb is capped so there is always a beat between the frown and the find
+  if (vis > thr) G.susp += Math.min(0.5, vis - thr) * SUSP_GAIN[k] * closer * dt;
   else G.susp = Math.max(0, G.susp - 0.055 * dt);
   G.susp = Math.min(1, G.susp);
   G.suspMaxSweep = Math.max(G.suspMaxSweep, G.susp);
   if (G.susp > 0.62 && !G.warned) {
     G.warned = true;
     doRap(0.5);
+    // he stops, and brings the light back to what caught it
+    G.pauseLeft = Math.max(G.pauseLeft, 2.2 + 0.2 * k);
+    G.lookBack = G.pauseLeft;
     caption('He frowns, and raps upon the wall.', 1.8);
   }
   if (G.susp < 0.5) G.unseen += dt;
@@ -349,7 +390,7 @@ function updateSuspicion(dt) {
 
 // ---------------------------------------------------------------- score, win, lose
 function thrift() {
-  const budget = G.t * 0.125 + 0.8;
+  const budget = G.t * BUCKET_REFILL + 0.8;
   return 1 + 0.5 * Math.max(0, Math.min(1, 1 - G.spent / budget));
 }
 function computeScore(won) {
@@ -381,6 +422,8 @@ function finish(won) {
   const bl = isBest ? `A new best · <b>${G.score}</b>` : bestLine();
   $('end-best').innerHTML = bl;
   $('best').innerHTML = bestLine();
+  // the win screen's text block starts below the eye and its halo, whatever the viewport
+  end.style.setProperty('--eye-bottom', `${Math.round((sim.eye_y() + sim.eye_r() * 4.2) * grid.cell + 10)}px`);
   $('hud').hidden = true;
   document.body.classList.add('on-screen');
   G.endT = 0;
@@ -416,12 +459,6 @@ function updateHud(force) {
   const st = $('streak');
   st.hidden = G.streak === 0;
   st.textContent = `CLEAN ×${G.streak}`;
-  // trowel load
-  const load = $('load'), lip = $('load-lip');
-  const top = 100 - 68 * G.bucket;
-  load.setAttribute('y', top.toFixed(1));
-  lip.setAttribute('y', (top - 1.5).toFixed(1));
-  if (G.bucket > 0.05) $('trowel').classList.remove('empty');
   $('btn-breath').classList.toggle('cooling', G.breathCd > 0 || G.breath > 0);
 }
 
@@ -429,9 +466,13 @@ function updateHud(force) {
 let shakeT = 0;
 let lastTs = 0;
 let titleT = 0;
+let bucketShake = 0;
+let bucketShown = 1; // eased bucket level for the gauge
+
+const ledgeH = () => Math.max(26, H * 0.075);
 
 function drawLedge() {
-  const lh = Math.max(26, H * 0.075);
+  const lh = ledgeH();
   const y = H - lh;
   const g = ctx.createLinearGradient(0, y, 0, H);
   g.addColorStop(0, '#2a2119'); g.addColorStop(0.08, '#17120e'); g.addColorStop(1, '#0a0806');
@@ -448,18 +489,115 @@ function drawLedge() {
   ctx.fillRect(0, y - 34, W, 34);
 }
 
+/* The cursor is the blade of the trowel, the width of the stroke, clipped to the wall so it
+ * never draws onto the floor strip. */
 function drawCursor() {
   if (!hover.on || G.state !== 'play' || !document.body.classList.contains('has-mouse')) return;
   const r = brushR() * grid.cell;
+  const empty = G.bucket <= 0.02;
   ctx.save();
+  ctx.beginPath(); ctx.rect(0, 0, W, H - ledgeH()); ctx.clip();
   ctx.translate(hover.x, hover.y);
-  ctx.strokeStyle = 'rgba(22,17,13,.55)';
-  ctx.lineWidth = 1.2;
-  ctx.setLineDash([4, 5]);
-  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.strokeStyle = G.bucket > 0.02 ? 'rgba(233,223,201,.9)' : 'rgba(122,26,18,.9)';
-  ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(6, 0); ctx.moveTo(0, -6); ctx.lineTo(0, 6); ctx.stroke();
+  ctx.rotate(-0.42);
+  // a pointing trowel seen from above: heel at the top, the working edge along the bottom
+  const heel = -r * 0.62, toe = r * 0.5;
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.66, heel); ctx.lineTo(r * 0.66, heel);
+  ctx.lineTo(r * 0.98, heel + r * 0.28); ctx.lineTo(r * 0.72, toe);
+  ctx.lineTo(-r * 0.72, toe); ctx.lineTo(-r * 0.98, heel + r * 0.28);
+  ctx.closePath();
+  ctx.fillStyle = empty ? 'rgba(122,26,18,.10)' : 'rgba(233,223,201,.12)';
+  ctx.fill();
+  ctx.strokeStyle = empty ? 'rgba(122,26,18,.85)' : 'rgba(22,17,13,.62)';
+  ctx.lineWidth = 1.1;
+  ctx.stroke();
+  // the working edge carries the weight
+  ctx.beginPath(); ctx.moveTo(-r * 0.72, toe); ctx.lineTo(r * 0.72, toe);
+  ctx.lineWidth = 2.2; ctx.strokeStyle = empty ? 'rgba(122,26,18,.9)' : 'rgba(233,223,201,.8)'; ctx.stroke();
+  ctx.lineWidth = 0.8; ctx.strokeStyle = 'rgba(22,17,13,.5)'; ctx.stroke();
+  // tang
+  ctx.beginPath(); ctx.moveTo(0, heel); ctx.lineTo(0, heel - r * 0.45);
+  ctx.lineWidth = 2.4; ctx.strokeStyle = 'rgba(22,17,13,.6)'; ctx.stroke();
+  ctx.restore();
+}
+
+/* The plaster gauge: a pail of plaster standing on the ledge, drawn in the same lit relief as
+ * the wall. The level inside is the bucket; it empties visibly across a sweep. */
+function drawBucket(dt) {
+  if (G.state !== 'play') return;
+  bucketShown += (G.bucket - bucketShown) * Math.min(1, dt * 6);
+  if (bucketShake > 0) bucketShake -= dt;
+  const bw = Math.max(62, Math.min(W * 0.066, 100));
+  const bh = bw * 0.92;
+  const mouthRy = bw * 0.30;
+  const lh = ledgeH();
+  const cx = W - bw * 0.68 - 14 + (bucketShake > 0 && !reduced ? Math.sin(bucketShake * 60) * 3 * bucketShake : 0);
+  const top = H - lh * 0.55 - bh; // the base sits on the floor strip
+  const bot = top + bh;
+  const rTop = bw / 2, rBot = bw * 0.41;
+  ctx.save();
+  // shadow on the floor
+  ctx.fillStyle = 'rgba(0,0,0,.45)';
+  ctx.beginPath(); ctx.ellipse(cx + 4, bot, rBot * 1.15, mouthRy * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+  // body: tapered pail, lit from the upper left like the wall's relief
+  const body = () => {
+    ctx.beginPath();
+    ctx.moveTo(cx - rTop, top);
+    ctx.lineTo(cx - rBot, bot - mouthRy * 0.6);
+    ctx.ellipse(cx, bot - mouthRy * 0.6, rBot, mouthRy * 0.82, 0, Math.PI, 0, true);
+    ctx.lineTo(cx + rTop, top);
+    ctx.closePath();
+  };
+  const g = ctx.createLinearGradient(cx - rTop, 0, cx + rTop, 0);
+  g.addColorStop(0, '#2b2019'); g.addColorStop(0.18, '#6a5540'); g.addColorStop(0.42, '#4a3a2b');
+  g.addColorStop(0.8, '#221a14'); g.addColorStop(1, '#100c09');
+  body(); ctx.fillStyle = g; ctx.fill();
+  // dried plaster runs down the outside
+  ctx.save(); body(); ctx.clip();
+  ctx.fillStyle = 'rgba(233,223,201,.22)';
+  ctx.beginPath(); ctx.moveTo(cx - rTop * 0.55, top + 2); ctx.lineTo(cx - rTop * 0.42, top + 2); ctx.lineTo(cx - rTop * 0.34, top + bh * 0.62); ctx.lineTo(cx - rTop * 0.46, top + bh * 0.5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(233,223,201,.14)';
+  ctx.beginPath(); ctx.moveTo(cx + rTop * 0.2, top + 2); ctx.lineTo(cx + rTop * 0.34, top + 2); ctx.lineTo(cx + rTop * 0.3, top + bh * 0.4); ctx.lineTo(cx + rTop * 0.22, top + bh * 0.34); ctx.closePath(); ctx.fill();
+  // hoops
+  ctx.strokeStyle = 'rgba(233,223,201,.16)'; ctx.lineWidth = 1.5;
+  for (const f of [0.34, 0.74]) {
+    const y = top + bh * f, rr = rTop + (rBot - rTop) * f;
+    ctx.beginPath(); ctx.ellipse(cx, y, rr, mouthRy * (0.95 - 0.1 * f), 0, 0.15, Math.PI - 0.15); ctx.stroke();
+  }
+  ctx.restore();
+  // the mouth: inside is dark, the plaster sits in it
+  const cavity = ctx.createLinearGradient(0, top - mouthRy, 0, top + mouthRy);
+  cavity.addColorStop(0, '#0d0a08'); cavity.addColorStop(1, '#3a2c21');
+  ctx.beginPath(); ctx.ellipse(cx, top, rTop, mouthRy, 0, 0, Math.PI * 2);
+  ctx.fillStyle = cavity; ctx.fill();
+  // the plaster surface drops into the pail as the bucket empties (clipped to the mouth)
+  ctx.save();
+  ctx.beginPath(); ctx.ellipse(cx, top, rTop - 1, mouthRy - 1, 0, 0, Math.PI * 2); ctx.clip();
+  const lvl = Math.max(0, Math.min(1, bucketShown));
+  const sy = top + (1 - lvl) * mouthRy * 1.75;
+  const sr = rTop * (1 - 0.14 * (1 - lvl));
+  const pg = ctx.createLinearGradient(0, sy - mouthRy, 0, sy + mouthRy);
+  pg.addColorStop(0, '#f4ecd8'); pg.addColorStop(0.55, '#e9dfc9'); pg.addColorStop(1, '#c9bda3');
+  ctx.beginPath(); ctx.ellipse(cx, sy, sr, mouthRy * 0.92, 0, 0, Math.PI * 2);
+  ctx.fillStyle = pg; ctx.fill();
+  // the near lip throws a shadow over the plaster
+  const lipS = ctx.createLinearGradient(0, top + mouthRy * 0.2, 0, top + mouthRy);
+  lipS.addColorStop(0, 'rgba(0,0,0,0)'); lipS.addColorStop(1, 'rgba(0,0,0,.35)');
+  ctx.fillStyle = lipS; ctx.fillRect(cx - rTop, top, rTop * 2, mouthRy);
+  ctx.restore();
+  // rim
+  ctx.beginPath(); ctx.ellipse(cx, top, rTop, mouthRy, 0, 0, Math.PI * 2);
+  ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(233,223,201,.55)'; ctx.stroke();
+  ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.stroke();
+  // empty: the rim goes bloody, as the HUD's attention bar does
+  if (G.bucket <= 0.02) { ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(122,26,18,.8)'; ctx.stroke(); }
+  // label
+  ctx.font = `500 ${portrait ? 9 : 10}px Spectral, serif`;
+  try { ctx.letterSpacing = '0.22em'; } catch {}
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillStyle = 'rgba(233,223,201,.5)';
+  ctx.fillText('PLASTER', cx + 2, bot + mouthRy * 0.3 + 3);
+  try { ctx.letterSpacing = '0px'; } catch {}
   ctx.restore();
 }
 
@@ -475,18 +613,23 @@ function frame(ts) {
 
   if (G.state === 'title') {
     titleT += dt;
-    // the lantern breathes at the right edge; the wall itself is still
+    // the poster breathes: the lantern sways at the edge, the damp keeps blooming through the
+    // sim, and the eye opens and closes on an ~8 s cycle
     const L = G.lantern;
     const breathe = 0.5 + 0.5 * Math.sin(titleT * 0.5);
-    if (portrait) sim.set_lantern(grid.w * 0.5 + grid.w * 0.15 * Math.sin(titleT * 0.3), grid.h * (1.02 + 0.06 * breathe), grid.h * 0.42, 0.95);
+    if (portrait) sim.set_lantern(grid.w * (1.04 + 0.06 * breathe), grid.h * (0.30 + 0.05 * Math.sin(titleT * 0.23)), grid.w * 0.95, 0.95);
     else sim.set_lantern(grid.w * (1.02 + 0.05 * breathe), grid.h * (0.42 + 0.1 * Math.sin(titleT * 0.23)), grid.h * 0.78, 0.95);
     L.s = 0.9;
+    const lid = reduced ? 1 : titleLid(titleT);
+    sim.set_lid(lid);
+    sim.set_eye(0.45 * lid);
+    sim.step(Math.min(50, dt * 1000), 0.2);
   } else if (G.state === 'play') {
     G.t += dt;
     G.difficulty = Math.min(1.25, G.t / 72 + G.sweep * 0.08);
     if (G.breath > 0) G.breath -= dt;
     if (G.breathCd > 0) G.breathCd -= dt;
-    G.bucket = Math.min(1, G.bucket + 0.125 * dt);
+    G.bucket = Math.min(1, G.bucket + BUCKET_REFILL * dt);
     // substep the sim so fast-forward stays stable
     const sub = Math.max(1, Math.ceil(dt / 0.034));
     const p0 = performance.now();
@@ -500,11 +643,12 @@ function frame(ts) {
     G.endT += dt;
     const L = G.lantern;
     if (G.state === 'win') {
-      // the light goes up the stair; in the dark the eye opens all the way
+      // the light goes up the stair; in the dusk the shape stays in the wall and the eye opens
       L.s = Math.max(0, L.s - dt * 0.6);
       sim.set_lantern(L.x, L.y - (portrait ? grid.h : 0) * dt, L.r, L.s);
-      G.ambient = Math.max(0.05, G.ambient - dt * 0.4);
+      G.ambient = Math.max(0.17, G.ambient - dt * 0.4);
       sim.set_ambient(G.ambient);
+      if (G.endT > 0.8) { G.reveal = Math.min(0.8, G.reveal + dt * 0.3); sim.set_reveal(G.reveal); }
       if (G.endT > 1.4) { G.eyeOpen = Math.min(1, G.eyeOpen + dt * 0.35); sim.set_eye(G.eyeOpen); }
       for (let i = 0; i < 2; i++) sim.step(dt * 500, 0.4);
     } else {
@@ -545,6 +689,7 @@ function frame(ts) {
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
   drawLedge();
+  drawBucket(dt);
   drawCursor();
   ctx.restore();
   const p4 = performance.now();
@@ -746,8 +891,9 @@ fitCanvas(canvas, ({ width, height, dpr }) => {
   const wasPortrait = portrait;
   if (!grid.w || (wasPortrait !== (H > W)) || Math.abs(grid.w * grid.cell - W) > W * 0.25) {
     // first fit, or an orientation flip: rebuild the wall (the cat pose changes with it)
-    setupGrid(G.seed);
+    setupGrid(G.seed, G.state === 'title' ? titlePose() : null);
     if (G.state === 'title') dressTitle();
+    else if (G.state === 'play') sim.start_dress();
   }
 });
 
@@ -772,8 +918,11 @@ window.__poe = {
   paint(cssX, cssY) { const p = toGrid(cssX, cssY); if (!last) last = p; paintTo(p.x, p.y, false); },
   release() { last = null; },
   cat() { return { x: sim.cat_cx() * grid.cell, y: sim.cat_cy() * grid.cell, s: sim.cat_size() * grid.cell }; },
+  eye() { return { x: sim.eye_x() * grid.cell, y: sim.eye_y() * grid.cell, r: sim.eye_r() * grid.cell }; },
   showAt(cssX, cssY) { return sim.show_at(cssX / grid.cell, cssY / grid.cell); },
-  visibility: () => sim.visibility(),
+  visibility: () => G.vis || 0,
+  eyeShow: () => sim.show_at(sim.eye_x(), sim.eye_y()),
+  visParts: () => ({ raw: sim.visibility(), eye: sim.eye_visibility(), lump: sim.lump_visibility() }),
   fps: () => perf.fps,
   perf: () => ({ fps: +perf.fps.toFixed(1), step: +(perf.step / perf.n).toFixed(2), render: +(perf.render / perf.n).toFixed(2), blit: +(perf.blit / perf.n).toFixed(2), post: +(perf.post / perf.n).toFixed(2), n: perf.n }),
   total: () => sim.total_visibility(),
