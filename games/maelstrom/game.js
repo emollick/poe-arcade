@@ -3,7 +3,7 @@
  * the vortex time; the CPU only runs the small game (player, a dozen objects).
  */
 import { mountBack, fitCanvas, createAudio, saveState, loadState, prefersReducedMotion } from '/shared/poe.js';
-import { PARTICLE_VS, PARTICLE_FS, SKY_VS, SKY_FS, GLYPH_VS, GLYPH_FS, GRADE_VS, GRADE_FS } from './shaders.js';
+import { PARTICLE_VS, PARTICLE_FS, SKY_VS, SKY_FS, FUNNEL_FS, GLYPH_VS, GLYPH_FS, GRADE_VS, GRADE_FS } from './shaders.js';
 
 mountBack();
 
@@ -61,7 +61,7 @@ const MAX_PARTICLES = qParam === 'full' ? 300000 : qParam === 'phone' ? 60000 : 
 let drawCount = MAX_PARTICLES;
 const DPR_CAP = (isTouch || software) ? 1 : 2;
 
-let progP, progS, progG, progV, vaoP, vaoG, instBuf;
+let progP, progS, progF, progG, progV, vaoP, vaoG, instBuf;
 const INST_STRIDE = 11; // pos3 size1 kind1 rot1 col4 glow1
 const MAX_INST = 160;
 const instData = new Float32Array(MAX_INST * INST_STRIDE);
@@ -69,6 +69,7 @@ const instData = new Float32Array(MAX_INST * INST_STRIDE);
 function initGL() {
   progP = compile(PARTICLE_VS, PARTICLE_FS);
   progS = compile(SKY_VS, SKY_FS);
+  progF = compile(SKY_VS, FUNNEL_FS);   // the funnel floor shares the sky's unprojection
   progG = compile(GLYPH_VS, GLYPH_FS);
   progV = compile(GRADE_VS, GRADE_FS);
 
@@ -546,11 +547,15 @@ function update(dt) {
     S.endT += dt;
     const k = clamp(S.endT / 2.8, 0, 1);
     S.dive = k; S.speed = 1 + 4 * k; S.tau += dt * S.speed;
-    S.dark = k * k * 0.78;
+    S.dark = k * k * 0.30;
+    S.flat = 1 + 0.6 * k * k;          // the walls tower as we go down
     p.u = Math.min(1.02, p.u + dt * 0.1);
     S.camAzTarget = p.th + Math.PI;
     if (S.endT > 3.4) showEnd(false);
   }
+  // behind the end screens the water keeps moving: fast round the fallen camera, slow on the calm disc
+  if (S.mode === 'lost') S.tau += dt * S.speed * 0.6;
+  if (S.mode === 'won') S.tau += dt * 0.35;
   S.shake = Math.max(0, S.shake - dt * 2.5);
   // camera azimuth follows the player around the funnel with a gentle sway
   const sway = reduced ? 0 : Math.sin(S.tau * 0.23) * 0.16;
@@ -570,10 +575,11 @@ function buildCamera() {
   // eye hangs just inside the rim, looking across the funnel at the far wall
   let R = portrait ? 1.3 : 1.02, Hh = portrait ? 1.05 : 1.0, fov = portrait ? 92 : 72;
   let pitch = (portrait ? -33 : -24) - 10 * depth;
-  if (S.mode === 'dying') {
-    const k = S.dive; R = lerp(R, 0.3, k); Hh = lerp(Hh, -0.3, k * k); pitch = lerp(pitch, -88, k); fov = lerp(fov, 105, k);
+  if (S.mode === 'dying' || S.mode === 'lost') {
+    const k = S.dive, ks = k * k * (3 - 2 * k);
+    R = lerp(R, 0.10, ks); Hh = lerp(Hh, -1.10, k * k); pitch = lerp(pitch, 86, ks); fov = lerp(fov, portrait ? 112 : 100, ks);
   }
-  if (S.mode === 'slack' || S.mode === 'won') { const k = S.moonLit; Hh += 0.45 * k; R += 0.25 * k; pitch += 6 * k; }
+  if (S.mode === 'slack' || S.mode === 'won') { const k = S.moonLit; Hh += (portrait ? 0.7 : 0.55) * k; R += 0.25 * k; pitch += 4 * k; }
   const sh = S.shake * (reduced ? 0 : 0.03);
   const eye = [Math.cos(az) * R + (Math.random() - 0.5) * sh, Math.sin(az) * R + (Math.random() - 0.5) * sh, Hh + (Math.random() - 0.5) * sh];
   const pr = pitch * Math.PI / 180;
@@ -583,8 +589,9 @@ function buildCamera() {
   cam.proj = M.perspective(cam.fov, W / H, 0.05, 40, 0);
   cam.vp = M.mul(cam.proj, cam.view);
   cam.inv = M.invert(cam.vp);
-  cam.moonAz = az + Math.PI + (portrait ? -0.06 : 0.30);
-  const el = (portrait ? 0.125 : 0.09) + 0.06 * S.moonLit;
+  const dk = S.dive * S.dive;
+  cam.moonAz = az + Math.PI + (portrait ? -0.06 : 0.30) + Math.PI * dk;   // as we fall the moon swings overhead, behind us
+  const el = (portrait ? 0.125 : 0.09) + 0.06 * S.moonLit + (portrait ? 0.86 : 0.92) * dk;   // ...and climbs, so it hangs just inside the upper rim
   cam.moonDir = [Math.cos(cam.moonAz) * Math.cos(el), Math.sin(cam.moonAz) * Math.cos(el), Math.sin(el)];
   // which way is "right" for the player on screen?
   const w0 = M.project(cam.vp, worldOf(p.u, p.th, S.flat), W, H);
@@ -609,14 +616,27 @@ function render() {
   gl.uniformMatrix4fv(progS.u.uInvVP, false, cam.inv);
   gl.uniform3fv(progS.u.uCam, cam.eye);
   gl.uniform3fv(progS.u.uMoonDir, cam.moonDir);
-  gl.uniform1f(progS.u.uMoonLit, S.moonLit);
+  gl.uniform1f(progS.u.uMoonLit, Math.max(S.moonLit, S.dive * 0.7));   // the moon shines down into the gulf
   gl.uniform1f(progS.u.uT, S.tau);
-  gl.uniform1f(progS.u.uDark, S.dark);
+  gl.uniform1f(progS.u.uDark, S.dark * 0.5);
   gl.bindVertexArray(null);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 
+  // the funnel itself: a shaded surface under the particles, so the whirl reads at any particle count
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(progF.p);
+  gl.uniformMatrix4fv(progF.u.uInvVP, false, cam.inv);
+  gl.uniform3fv(progF.u.uCam, cam.eye);
+  gl.uniform1f(progF.u.uTau, S.tau);
+  gl.uniform1f(progF.u.uFlat, S.flat);
+  gl.uniform1f(progF.u.uMoonAz, cam.moonAz);
+  gl.uniform1f(progF.u.uMoonLit, S.moonLit);
+  gl.uniform1f(progF.u.uDark, S.dark);
+  gl.uniform1f(progF.u.uDive, S.dive);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
   // particles, additive; a second ghost draw slightly behind in time for the streak
-  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+  gl.blendFunc(gl.ONE, gl.ONE);
   gl.useProgram(progP.p); gl.bindVertexArray(vaoP);
   const proj = canvas.height / (2 * Math.tan(cam.fov / 2));
   const density = Math.sqrt(300000 / drawCount);
@@ -629,7 +649,7 @@ function render() {
   gl.uniform1f(progP.u.uMoonLit, S.moonLit);
   gl.uniform1f(progP.u.uDive, S.dive);
   gl.uniform3fv(progP.u.uCam, cam.eye);
-  const streaks = S.dive > 0 ? 3 : (software ? 1 : 2);
+  const streaks = software ? (S.dive > 0 ? 2 : 1) : (S.dive > 0 ? 3 : 2);
   const base = 0.42 * density * (1 - S.dark);
   for (let i = 0; i < streaks; i++) {
     gl.uniform1f(progP.u.uStreak, -i * (0.045 + S.dive * 0.25));
@@ -673,8 +693,10 @@ function render() {
     const dcam = Math.hypot(pw[0] - cam.eye[0], pw[1] - cam.eye[1], pw[2] - cam.eye[2]);
     const pulse = 1 + 0.12 * Math.sin(S.tau * 6);
     const stunCol = p.stun > 0 ? [1.0, 0.45, 0.35] : COL.player;
-    items.push({ d: dcam + 0.002, pos: pw, size: gs * 0.11 * pulse, kind: 0, rot: 0, col: stunCol, a: 0.8 * (1 - S.dark), glow: 0 });
-    items.push({ d: dcam, pos: pw, size: gs * 0.055 * pulse, kind: 9, rot: S.tau * 0.8, col: stunCol, a: (1 - S.dark), glow: p.lashed ? 1 : 0 });
+    if (S.mode !== 'won') {   // on the calm disc you are already thrown to the surface; the bead would only sit on the type
+      items.push({ d: dcam + 0.002, pos: pw, size: gs * 0.11 * pulse, kind: 0, rot: 0, col: stunCol, a: 0.8 * (1 - S.dark), glow: 0 });
+      items.push({ d: dcam, pos: pw, size: gs * 0.055 * pulse, kind: 9, rot: S.tau * 0.8, col: stunCol, a: (1 - S.dark), glow: p.lashed ? 1 : 0 });
+    }
   }
   items.sort((a, b) => b.d - a.d);
   for (const it of items) { if (n >= MAX_INST) break; pushInst(n++, it.pos, it.size, it.kind, it.rot, it.col, it.a, it.glow); }
@@ -721,6 +743,8 @@ function render() {
 
 /* The title runs along the far rim of the funnel: project the rim circle. */
 function layoutTitle() {
+  const svg = $('#titleSvg');
+  if (W < 600) { svg.hidden = true; elStacked.hidden = false; return; }   // phones: the rim arc is too short for a legible title
   const az = S.camAz;
   const pts = [];
   const span = H > W ? 0.95 : 1.35;
@@ -732,14 +756,13 @@ function layoutTitle() {
   }
   if (pts[0][0] > pts[pts.length - 1][0]) pts.reverse();
   const ok = pts.every((q) => q[2] > 0 && q[1] > -H * 0.2 && q[1] < H * 0.9) && pts[0][0] < W * 0.35 && pts[pts.length - 1][0] > W * 0.65 && pts[0][0] > -W * 0.1 && pts[pts.length - 1][0] < W * 1.1;
-  const svg = $('#titleSvg');
   if (!ok) { svg.hidden = true; elStacked.hidden = false; return; }
   svg.hidden = false; elStacked.hidden = true;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   elRimPath.setAttribute('d', 'M' + pts.map((q) => `${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join(' L'));
-  let size = H > W ? Math.min(W * 0.19, 96) : Math.min(W * 0.11, 168);
+  let size = H > W ? Math.min(W * 0.19, 120) : Math.min(W * 0.12, 176);
   const len = elRimPath.getTotalLength();
-  size = Math.min(size, len / (10 * 0.66));   // "The Vortex": ~0.66em per glyph in heavy italic
+  size = Math.max(96, Math.min(size, len / (10 * 0.62)));   // "The Vortex": ~0.62em per glyph in heavy italic; never under 96px
   elRimText.setAttribute('font-size', size.toFixed(1));
 }
 

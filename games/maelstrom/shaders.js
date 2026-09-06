@@ -48,11 +48,15 @@ void main(){
     float jit = (fract(s0 * 77.7 + s1 * 13.1) - 0.5) * 0.06;
     pos = vec3(r * cos(th), r * sin(th), z + jit * (0.35 + 0.6 * u) * uFlat);
     bright = mix(1.0, 0.22, u);
-    // spiral foam bands, slowly turning with the rim: the classic whirlpool streaks
+    // spiral foam bands, slowly turning with the rim: the classic whirlpool streaks;
+    // at the slack of the tide they settle into gentle concentric rings
     float band = sin((th - WRIM * tau) * 5.0 + log(r) * 14.0 + s0 * 0.4);
+    float ring = sin(r * 36.0 - tau * 0.8 + s0 * 0.3);
+    band = mix(band, ring, uMoonLit);
     bright *= 0.45 + 0.75 * smoothstep(-0.2, 0.9, band);
     size   = mix(1.0, 0.5, u) * (0.6 + 0.8 * fract(s1 * 41.3));
     col = mix(vec3(0.82, 1.0, 0.90), vec3(0.12, 0.32, 0.72), smoothstep(0.08, 0.85, u));
+    col = mix(col, vec3(0.80, 0.86, 0.92), uMoonLit * 0.8);   // calm silver water at the slack
     // foam crests: a subset near the rim burns white
     float crest = step(0.86, fract(s2 * 53.7)) * (1.0 - smoothstep(0.0, 0.35, u));
     col = mix(col, vec3(1.0, 1.0, 0.97), crest);
@@ -79,14 +83,19 @@ void main(){
   float side = 0.5 + 0.5 * cos(ang - uMoonAz);
   float rays = pow(max(0.0, cos((ang - uMoonAz) * 9.0 + sin(tau * 0.15) * 0.5)), 30.0);
   float depthFade = clamp(1.0 + pos.z / 1.3, 0.0, 1.0);
-  bright *= (0.45 + 0.55 * side + rays * 1.1 * depthFade) * (0.75 + 0.55 * uMoonLit);
+  bright *= (0.45 + 0.55 * side + rays * 1.1 * depthFade) * (0.75 + 0.55 * uMoonLit) * (1.0 - 0.4 * uMoonLit);
   // gold on the lit rim
   col = mix(col, vec3(1.0, 0.86, 0.55), side * 0.35 * (1.0 - u) * (1.0 - smoothstep(0.0, 0.25, u)) * step(s3, 0.8));
+  // at the slack the moon's path lies across the calm water: the rings under it turn gold
+  float lineD = abs(pos.x * sin(uMoonAz) - pos.y * cos(uMoonAz));
+  float path = exp(-lineD * lineD * 30.0) * (0.55 + 0.45 * cos(ang - uMoonAz)) * uMoonLit * step(s3, 0.8);
+  col = mix(col, vec3(1.0, 0.84, 0.50), path * 0.85);
+  bright *= 1.0 + path * 0.6;
 
   vec4 clip = uVP * vec4(pos, 1.0);
   gl_Position = clip;
   float w = max(clip.w, 0.05);
-  float ps = size * uSizeMul * uProj / w * (1.0 + uDive * 1.5);
+  float ps = size * uSizeMul * uProj / w * (1.0 + uDive * 0.5);
   gl_PointSize = clamp(ps, 1.0, 48.0);
   // fade very-near particles so they never smear the lens
   float near = smoothstep(0.12, 0.45, w);
@@ -165,6 +174,96 @@ void main(){
     col += gold * 0.16 * exp(-daz * 4.0) * exp(el * 10.0) * (0.6 + 0.6 * uMoonLit);
   }
   o = vec4(col * (1.0 - uDark), 1.0);
+}`;
+
+/* ---- funnel floor: a GPU-independent whirlpool under the particles ------
+ * Same full-screen triangle and unprojection as the sky. Each ray is dropped
+ * onto the z=0 plane, then marched down the funnel surface z = funnelZ(r)*flat
+ * (a short adaptive march + bisection); the hit is shaded as dark water falling
+ * into black, with log-spiral foam bands that turn with the rim, the moon's
+ * rays down the wall and a lighter rim. uMoonLit cross-fades it to the calm
+ * silver disc of the slack, uDive/uDark darken it on the way into the gulf.
+ * Particles (24k or 300k) sit on top as sparkle; the composition is this. */
+export const FUNNEL_FS = `#version 300 es
+precision highp float;
+in vec3 vWorld;
+uniform vec3  uCam;
+uniform float uTau;
+uniform float uFlat;
+uniform float uMoonAz;
+uniform float uMoonLit;
+uniform float uDark;
+uniform float uDive;
+out vec4 o;
+${COMMON}
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p){
+  vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+  return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
+}
+float surf(vec2 xy){ return funnelZ(max(length(xy), RC)) * uFlat; }
+void main(){
+  vec3 d = normalize(vWorld - uCam);
+  bool inside = uCam.z < 0.0 && length(uCam.xy) < 1.0;   // the eye has gone down into the funnel
+  float t; vec3 p;
+  if (!inside) {
+    if (d.z > -0.002) discard;                            // sky
+    t = -uCam.z / d.z; p = uCam + d * t;                  // where the ray meets the sea level
+    if (length(p.xy) > 1.12) discard;                     // open sea: the sky pass painted it
+  } else { t = 0.0; p = uCam; }
+  float gap = p.z - surf(p.xy);
+  float dt = 0.0; bool hit = false; bool escaped = false;
+  float stepK = inside ? 0.7 : 0.45, stepMax = inside ? 0.22 : 0.10;
+  for (int i = 0; i < 48; i++) {
+    if (gap < 0.0) { hit = true; break; }
+    dt = clamp(gap * stepK, 0.004, stepMax);
+    t += dt; p = uCam + d * t;
+    if (p.z > 0.0 && length(p.xy) > 1.12) { escaped = true; break; }
+    gap = p.z - surf(p.xy);
+  }
+  if (escaped) discard;
+  if (hit) {   // refine
+    float t0 = t - dt, t1 = t;
+    for (int i = 0; i < 5; i++) { float tm = 0.5 * (t0 + t1); vec3 pm = uCam + d * tm; if (pm.z - surf(pm.xy) < 0.0) t1 = tm; else t0 = tm; }
+    t = 0.5 * (t0 + t1); p = uCam + d * t;
+  }
+  float r  = length(p.xy);
+  float th = atan(p.y, p.x);
+  float wall = clamp((r - RC) / (1.0 - RC), 0.0, 1.0);    // 0 at the core, 1 at the rim
+  float deep = clamp(uFlat, 0.0, 1.0);                     // 1 = funnel, ~0 = the calm disc
+  float lit  = 0.5 + 0.5 * cos(th - uMoonAz);              // the wall under the moon
+  // -- the whirl: dark water sliding into black, with a fine grain so it never bands
+  float grain = noise(vec2(th * 9.0 + log(r) * 3.0, log(r) * 16.0 - uTau * 0.7)) * 0.5
+              + noise(vec2(th * 31.0 - uTau * 0.4, log(r) * 44.0 - uTau * 1.6)) * 0.5;
+  float shade = pow(wall, 1.7) * (0.75 + 0.5 * grain);
+  vec3 funnel = mix(vec3(0.0, 0.0, 0.0), vec3(0.075, 0.14, 0.25), shade) * (0.55 + 0.6 * lit);
+  // log-spiral foam bands, turning with the rim (the same phase the particles ride)
+  float sp = th - WRIM * uTau;
+  float band  = sin(sp * 5.0 + log(r) * 14.0);
+  float band2 = sin(sp * 11.0 + log(r) * 31.0 + grain * 1.5);
+  float foam = smoothstep(0.35, 0.95, band) * (0.55 + 0.45 * smoothstep(-0.2, 0.8, band2)) * pow(wall, 1.3);
+  funnel += vec3(0.28, 0.46, 0.46) * foam * (0.28 + 0.34 * lit) * (0.6 + 0.4 * grain);
+  // the moon's rays streaming down the wall
+  float rays = pow(max(0.0, cos((th - uMoonAz) * 9.0 + sin(uTau * 0.15) * 0.5)), 30.0);
+  float depthFade = clamp(1.0 + p.z / 1.3, 0.0, 1.0);
+  funnel += vec3(0.62, 0.52, 0.30) * rays * depthFade * pow(wall, 0.8) * 0.36 * (0.6 + 0.4 * lit);
+  // -- the slack of the tide: a calm silver disc with the moon's path laid across it
+  float rings = 0.5 + 0.5 * sin(r * 36.0 - uTau * 0.8);
+  vec3 disc = vec3(0.30, 0.35, 0.41) * (0.70 + 0.30 * wall) * (0.80 + 0.30 * rings) * (0.85 + 0.3 * grain);
+  disc += vec3(0.34, 0.38, 0.42) * lit * 0.40;
+  float lineD = abs(p.x * sin(uMoonAz) - p.y * cos(uMoonAz));   // distance from the moon's path through the centre
+  float path = exp(-lineD * lineD * 28.0) * (0.55 + 0.45 * noise(vec2(r * 40.0 - uTau * 1.5, th * 4.0)));
+  path *= 0.55 + 0.45 * cos(th - uMoonAz);                    // brightest under the moon, dying toward the viewer
+  disc += vec3(0.98, 0.80, 0.46) * path * 0.9;
+  vec3 col = mix(disc, funnel, deep);
+  // -- a slightly lighter rim, gold on the moon's side, fading into the open sea
+  float rim = 1.0 - smoothstep(0.0, 0.11, abs(r - 1.0));
+  col += vec3(0.30, 0.40, 0.40) * rim * (0.35 + 0.35 * deep) * (0.7 + 0.6 * grain);
+  col += vec3(0.98, 0.80, 0.46) * rim * lit * 0.32;
+  if (!hit) col = vec3(0.0);                                 // straight down the throat
+  float alpha = 1.0 - smoothstep(1.04, 1.12, r);
+  col *= (1.0 - uDark);
+  o = vec4(col, alpha);
 }`;
 
 /* ---- glyphs: instanced billboards with SDF silhouettes ------------------ */

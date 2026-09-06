@@ -15,8 +15,8 @@
     <svg id="titleSvg" aria-hidden="true">
       <defs>
         <filter id="glow" x="-20%" y="-60%" width="140%" height="220%">
-          <feGaussianBlur stdDeviation="6" result="b"/>
-          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          <feGaussianBlur stdDeviation="12" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
       </defs>
       <path id="rimPath" d="M0 0" fill="none"/>
@@ -24,14 +24,14 @@
         <textPath href="#rimPath" startOffset="50%">The Vortex</textPath>
       </text>
     </svg>
-    <h1 id="stacked" class="stacked" hidden>The Vortex</h1>
+    <h1 id="stacked" class="stacked" hidden><span class="the">The</span><span class="word">Vortex</span></h1>
     <div class="title-block">
       <p class="over">Edgar Allan Poe · <em>A Descent into the Maelström</em></p>
       <p class="howto">
         Swim <kbd>←</kbd><kbd>→</kbd> around the wall, climb <kbd>↑</kbd>, <kbd>space</kbd> lash to whatever floats near.
         <strong>Cylinders rise. Everything else plunges.</strong> Hold on until the tide turns.
       </p>
-      <button id="start" type="button">Go down into the water</button>
+      <button id="start" type="button" class="cta">Go down into the water</button>
       <p id="best" class="best">no one has yet come up out of it</p>
     </div>
   </section>
@@ -68,7 +68,7 @@
       <p id="endQuote" class="quote"></p>
       <p class="end-score"><span id="endScore">0</span></p>
       <p id="endStats" class="end-stats"></p>
-      <button id="again" type="button">Go down again</button>
+      <button id="again" type="button" class="cta">Go down again</button>
     </div>
   </section>
 

@@ -4,7 +4,9 @@
  *   node games/maelstrom/playtest.mjs mobile     # 390x844, touch
  * Plays with real input until the player is lost to the gulf, then replays and
  * fast-forwards (window.__poe) to the slack of the tide. Screenshots land in
- * screenshots/maelstrom-{title,play,win,lose}.png (mobile adds "-mobile").
+ * screenshots/maelstrom-{title,play,win,lose}.png (mobile adds "-mobile"); the play
+ * frame is also written as maelstrom-desktop.png / -mobile.png so the delivered
+ * frames show the full particle tier rather than verify's 24k software tier.
  */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -58,7 +60,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 
 await fsp.mkdir(SHOTS, { recursive: true });
-await page.goto(`http://127.0.0.1:${port}/games/maelstrom/?q=${mobile ? 'phone' : 'full'}`, { waitUntil: 'load' });
+await page.goto(`http://127.0.0.1:${port}/games/maelstrom/?q=full`, { waitUntil: 'load' });
 await page.evaluate(() => document.fonts.ready);
 await sleep(2500);
 const q = await page.evaluate(() => window.__poe && window.__poe.quality);
@@ -102,6 +104,7 @@ while (Date.now() - t0 < 120000) {
   if (s.u > 0.55 && !mobile) { await page.keyboard.down('ArrowUp'); await sleep(200); await page.keyboard.up('ArrowUp'); }
   if (!playShot && s.t > 9) {
     await page.screenshot({ path: path.join(SHOTS, `maelstrom-play${suffix}.png`) });
+    await fsp.copyFile(path.join(SHOTS, `maelstrom-play${suffix}.png`), path.join(SHOTS, `maelstrom-${mobile ? 'mobile' : 'desktop'}.png`));
     console.log('play shot at', s);
     playShot = true;
   }
