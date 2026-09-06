@@ -22,7 +22,7 @@ const BH = 34, BD = 30;                           // brick height / depth
 const FAR_LEN = 1200, NEAR_LEN = 900;
 const courseY = (i) => FLOOR - TH * (i + 0.5);
 
-let U = 1, PORTRAIT = false, BARW = 1;
+let U = 1, PORTRAIT = false;
 const stage = $('#stage'), camera = $('#camera'), world = $('#world');
 const placed = [];
 
@@ -135,13 +135,18 @@ function buildWorld() {
   S.plaster = place(el('plaster'), { w: NW + 4, h: NH + 4, y: 90, z: -D + BD / 2 + 2 });
   // the next slot, and the trowel
   S.ghost = place(el('ghost'), { w: 71, h: BH, y: courseY(0), z: -D + BD / 2 + 1 });
+  S.ghost.core = el('core', S.ghost.el);              // the sweet zone, sized per tier
   S.trowel = place(el('trowel open'), { w: 90, h: 60, y: courseY(0) - 6, z: -D + BD / 2 + 34 });
-  el('handle', S.trowel.el); el('blade', S.trowel.el); el('mortar-blob', S.trowel.el);
+  el('halo', S.trowel.el); el('handle', S.trowel.el); el('blade', S.trowel.el); el('mortar-blob', S.trowel.el);
   // the quantity of building stone (title foreground)
   S.pile = [];
   const px = 292, pz = -D + 1300;
   const spots = [[-40, 0, 0], [40, 0, 6], [0, 0, -3], [-20, 1, 2], [20, 1, -5], [0, 2, 4], [-48, 0, 40], [30, 0, 38], [-10, 1, 40]];
-  for (const [dx, lvl, dz] of spots) S.pile.push(makeBrick({ x: px + dx, y: FLOOR - BH / 2 - lvl * (BH + 2), z: pz + dz, L: 71, extra: `rotateY(${dz * 0.5}deg)` }));
+  spots.forEach(([dx, lvl, dz], i) => {
+    const b = makeBrick({ x: px + dx, y: FLOOR - BH / 2 - lvl * (BH + 3), z: pz + dz, L: 71, extra: `rotateY(${dz * 0.5}deg)` });
+    b.el.classList.add('pile'); b.faces.f.style.setProperty('--sm', (0.6 + (i * 37 % 7) / 10).toFixed(1));
+    S.pile.push(b);
+  });
   // the old rampart of bones, re-erected at the end
   S.bonepile = place(el('bonepile'), { w: 340, h: 230, y: FLOOR - 115, z: -D + BD + 40 });
   const bp = el('fig', S.bonepile.el);
@@ -174,7 +179,6 @@ function layout() {
   document.documentElement.style.setProperty('--u', U.toFixed(4));
   world.style.fontSize = (U * 10) + 'px';
   for (const o of placed) { applyOne(o); if (o.faces) sizeBrick(o); }
-  BARW = bar.clientWidth || 1;
   camApply();
 }
 addEventListener('resize', layout, { passive: true });
@@ -281,7 +285,7 @@ function tickText(now) {
 function clearText() { for (const k in chan) { chan[k].q.length = 0; chan[k].until = 0; chan[k].el.className = ''; } }
 
 /* ------------------------------------------------------------------- game */
-const hud = $('#hud'), title = $('#title'), end = $('#end'), bar = $('#bar'), zone = $('#zone'), marker = $('#marker'), ticks = $('#bar-ticks');
+const hud = $('#hud'), title = $('#title'), end = $('#end');
 const fort = () => S.fort.el;
 let best = loadState('amontillado:best', { score: 0, tier: 0, won: false });
 function showBest() { $('#best').textContent = best.score > 0 ? `best ${best.score} · tier ${ROMAN[Math.min(10, Math.max(0, best.tier - 1))]}${best.won ? ' · walled' : ''}` : 'no mortal has yet finished the wall'; }
@@ -289,7 +293,7 @@ function showBest() { $('#best').textContent = best.score > 0 ? `best ${best.sco
 const G = {
   state: 'title', t: 0, tier: 0, slot: 0, course: [], bricks: [], laid: 0,
   score: 0, streak: 0, bestStreak: 0, perfects: 0, collapses: 0, crookedInCourse: 0,
-  torch: 140, torchMax: 140, torchPaused: false,
+  torch: 105, torchMax: 105, torchPaused: false,
   p: 0.2, dir: 1, speed: 0.6, disp: 0.2, hw: 0.13, c: 0.5,
   held: false, pressT: 0, pressPos: 0, listening: false,
   jitterT: 0, jitterD: 1, reverseT: 0, boostT: 0, darkT: 0, cueT: 0, pendingEvt: null, nextEvt: 0, lastEvt: '',
@@ -314,9 +318,8 @@ function startGame() {
   S.ghost.el.style.visibility = ''; S.trowel.el.style.visibility = '';
   stage.classList.remove('out'); $('#flash').className = '';
   end.hidden = true; end.className = ''; title.classList.add('gone'); hud.hidden = false; $('#mute').hidden = false;
-  BARW = bar.clientWidth || 1;
   $('#force').hidden = true; $('#bar-hint').classList.remove('gone');
-  for (const i of $('#chain').children) i.classList.remove('broken');
+  for (const l of document.querySelectorAll('#chain .lk')) l.classList.remove('broken');
   clearText();
   SFX.silence(false); SFX.bedOn();
   cam.ease = 0.045;
@@ -328,8 +331,6 @@ function setTier(i) {
   const d = difficulty(i); G.speed = 1 / d.traverse; G.hw = d.hw;
   G.nextEvt = G.t + (i >= 2 ? Math.min(d.interval, 3.2) : 1e9);
   playCam(i);
-  ticks.innerHTML = '';
-  for (const s of G.course) { const t = document.createElement('i'); t.style.left = ((s.x - s.L / 2 + 150) / 300 * 100) + '%'; t.style.width = (s.L / 300 * 100) + '%'; ticks.appendChild(t); s.tick = t; }
   const y = courseY(i);
   S.ghost.y = y; S.trowel.y = y - 6; applyOne(S.trowel);
   setSlot();
@@ -341,7 +342,7 @@ function setSlot() {
   if (!s) return;
   G.c = (s.x + 150) / 300;
   S.ghost.x = s.x; S.ghost.w = s.L; applyOne(S.ghost);
-  zone.style.left = ((G.c - G.hw) * 100) + '%'; zone.style.width = (G.hw * 2 * 100) + '%';
+  S.ghost.core.style.width = Math.min(100, (G.hw * 2 * 300) / s.L * 100).toFixed(1) + '%';
 }
 function tierScript(i) {
   const f = fort();
@@ -416,9 +417,8 @@ function lay(pos) {
   else { G.streak = 0; pts = 20; label = 'crooked · +20'; G.crookedInCourse++; }
   G.bestStreak = Math.max(G.bestStreak, G.streak);
   G.score += pts; G.laid++;
-  pop(label, kind);
-  if (kind !== 'crooked') { zone.classList.remove('hit'); void zone.offsetWidth; zone.classList.add('hit'); }
-  s.tick.className = kind === 'crooked' ? 'crooked' : 'laid';
+  pop(label, kind, s.x);
+  if (kind !== 'crooked') { const t = S.trowel.el; t.classList.remove('hit'); void t.offsetWidth; t.classList.add('hit'); }
   if (G.laid === 1) { setTimeout(() => { SFX.moan(); say('m', '… a low moaning cry from the depth of the recess. It was not the cry of a drunken man.', 4); }, 900); }
   if (G.laid === 3) $('#bar-hint').classList.add('gone');
   if (G.crookedInCourse >= 3) { setTimeout(collapse, 420); updateHud(); return; }
@@ -434,7 +434,7 @@ function courseDone() {
 }
 function collapse() {
   G.collapses++;
-  pop('the course collapses', 'collapse'); SFX.thud(1.3); setTimeout(() => SFX.thud(0.9), 120); setTimeout(() => SFX.thud(0.6), 260); doShake(0.5, 0.7);
+  pop('the course collapses', 'collapse', 0); SFX.thud(1.3); setTimeout(() => SFX.thud(0.9), 120); setTimeout(() => SFX.thud(0.6), 260); doShake(0.5, 0.7);
   const fall = G.bricks.filter((b) => Math.abs(b.y - courseY(G.tier)) < TH || Math.abs(b.y - (courseY(G.tier) - 4)) < TH);
   for (const b of fall) {
     const i = G.bricks.indexOf(b); if (i >= 0) G.bricks.splice(i, 1);
@@ -443,12 +443,11 @@ function collapse() {
     b.extra = `rotateX(${rand(-120, 120).toFixed(0)}deg) rotateZ(${rand(-90, 90).toFixed(0)}deg)`;
     applyOne(b); setTimeout(() => unplace(b), 1150);
   }
-  const links = $('#chain').children;
+  const links = document.querySelectorAll('#chain .lk');
   for (let i = 0; i < G.collapses && i < 3; i++) links[2 - i].classList.add('broken');
   SFX.chain(0.6); fort().classList.add('rattle'); setTimeout(() => fort().classList.remove('rattle'), 700);
   if (G.collapses >= 3) { lose('free'); return; }
   G.slot = 0; G.crookedInCourse = 0;
-  for (const s of G.course) s.tick.className = '';
   say('m', G.collapses === 1 ? 'The stones would not sit. I began the tier again.' : 'Again the course gave. The chain strained at its staple.', 3);
   setSlot(); updateHud();
 }
@@ -457,7 +456,20 @@ function dust(x, y, n) {
   for (let i = 0; i < n; i++) { const s = document.createElement('i'); s.style.setProperty('--dx', rand(-3.5, 3.5).toFixed(2) + 'em'); s.style.setProperty('--dy', rand(-2.5, 0.6).toFixed(2) + 'em'); d.el.appendChild(s); }
   setTimeout(() => unplace(d), 700);
 }
-function pop(text, cls) { const p = $('#pop'); p.textContent = text; p.className = ''; void p.offsetWidth; p.className = 'go ' + cls; }
+/* the grade sits on the brick: remember the world point, frame() projects it to the screen while it shows */
+function pop(text, cls, x) {
+  G.popX = x || 0; G.popY = courseY(G.tier) - 44; G.popUntil = G.t + 1.1;
+  const p = $('#pop'); p.textContent = text; p.className = ''; void p.offsetWidth; p.className = 'go ' + cls;
+  popPlace();
+}
+function project(x, y, z) {               // world → screen, mirroring #stage's perspective and #camera's translate
+  const P = 1000, Z = z - cam.z, k = P / (P - Z);
+  return [innerWidth / 2 + (x - cam.x) * U * k, innerHeight / 2 + (y - cam.y) * U * k];
+}
+function popPlace() {
+  const [sx, sy] = project(G.popX, G.popY, -D + BD / 2);
+  const p = $('#pop'); p.style.left = sx.toFixed(1) + 'px'; p.style.top = sy.toFixed(1) + 'px';
+}
 
 /* ---- the eleventh tier */
 function lastTierScript(k) {
@@ -482,7 +494,7 @@ function beginForce() {
   const b = makeBrick({ x: s.x, y, z: -D + 80, L: s.L });
   b.el.classList.add('hero'); G.lastStone = b; G.bricks.push(b);
   void b.el.offsetWidth; b.el.classList.remove('instant');
-  $('#force').hidden = false; marker.classList.add('dark');
+  $('#force').hidden = false;
   sayNow('m', 'I struggled with its weight; I placed it partially in its destined position.', 3);
 }
 function forceStep() {
@@ -551,11 +563,11 @@ function press(e) {
   if (G.state !== 'play') return;
   if (G.phase === 'force') { forceStep(); return; }
   if (G.phase !== 'lay' || G.held) return;
-  G.held = true; G.pressT = G.t; G.pressPos = G.disp; marker.classList.add('frozen');
+  G.held = true; G.pressT = G.t; G.pressPos = G.disp; S.trowel.el.classList.add('frozen');
 }
 function release() {
   if (G.state !== 'play' || !G.held) return;
-  G.held = false; marker.classList.remove('frozen');
+  G.held = false; S.trowel.el.classList.remove('frozen');
   const dt = G.t - G.pressT;
   if (G.listening) { G.listening = false; $('#listen').classList.remove('on'); return; }
   if (dt < 0.26 && G.phase === 'lay') lay(G.pressPos);
@@ -607,6 +619,7 @@ function frame(now) {
   tickText(G.t);
 
   if (G.state !== 'play') return;
+  if (G.t < (G.popUntil || 0)) popPlace();
 
   // torch
   if (!G.torchPaused) {
@@ -641,12 +654,12 @@ function frame(now) {
   }
   const j = G.jitterT > 0 ? 0.035 * (Math.sin(t * 37) + 0.5 * Math.sin(t * 61)) * Math.min(1, G.jitterT / G.jitterD * 2) : 0;
   G.disp = clamp(G.p + j, 0, 1);
-  marker.style.transform = `translateX(${(G.disp * BARW).toFixed(1)}px)`;
-  marker.classList.toggle('dark', G.darkT > 0 && !G.held);
-  const hot = Math.abs(G.disp - G.c) <= G.hw;
+  // the trowel is the marker: it rides the course, fades in the quiet, and its head lights inside the sweet zone
+  const hot = Math.abs(G.disp - G.c) <= G.hw, tr = S.trowel.el;
   S.ghost.el.classList.toggle('hot', hot);
-  // trowel rides the course
-  S.trowel.x = -150 + 300 * G.disp; S.trowel.extra = `rotateZ(${(G.dir * 8).toFixed(0)}deg)`; S.trowel.el.style.transform = tf(S.trowel);
+  tr.classList.toggle('hot', hot);
+  tr.classList.toggle('dark', G.darkT > 0 && !G.held);
+  S.trowel.x = -150 + 300 * G.disp; S.trowel.extra = `rotateZ(${(G.dir * 8).toFixed(0)}deg)`; tr.style.transform = tf(S.trowel);
 }
 
 /* ---------------------------------------------------------------- debug */
@@ -654,7 +667,7 @@ Object.assign(window.__poe, {
   start: () => { if (G.state === 'title') startGame(); },
   lay: (perfect = true) => { if (G.state !== 'play' || G.phase !== 'lay') return; G.forcePerfect = !!perfect; lay(perfect ? G.c : (G.c + 0.5) % 1); G.forcePerfect = false; },
   force: () => forceStep(),
-  skipTo: (tier) => { if (G.state !== 'play') return; for (let i = G.tier; i < tier; i++) { for (const s of G.course) s.tick.className = 'laid'; S.mortar.h = TH * (i + 1); S.mortar.y = FLOOR - S.mortar.h / 2; applyOne(S.mortar); setTier(i + 1); } clearText(); },
+  skipTo: (tier) => { if (G.state !== 'play') return; for (let i = G.tier; i < tier; i++) { S.mortar.h = TH * (i + 1); S.mortar.y = FLOOR - S.mortar.h / 2; applyOne(S.mortar); setTier(i + 1); } clearText(); },
   setTorch: (s) => { G.torch = s; },
   lose, win,
   info: () => ({ state: G.state, phase: G.phase, tier: G.tier, slot: G.slot, p: G.disp, c: G.c, hw: G.hw, dir: G.dir, score: G.score, torch: G.torch, collapses: G.collapses, held: G.held }),

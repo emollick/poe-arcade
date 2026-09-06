@@ -40,12 +40,13 @@ function serve() {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/* In-page bot. skill: fraction of the sweet zone it aims inside; err: chance of a deliberately bad tap. */
+/* In-page bot. skill: fraction of the sweet zone it aims inside; err: chance of a deliberately bad tap;
+ * pace: human pacing — the chance it takes a given pass of the trowel through the zone (the rest go by). */
 const BOT = `(opts) => {
   const G = window.__poe.G;
   const down = () => document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1 }));
   const up = () => document.body.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
-  let cool = 0, lastForce = 0, taps = 0, listens = 0;
+  let cool = 0, lastForce = 0, taps = 0, listens = 0, wasIn = false;
   window.__bot = { taps: 0, stop: false };
   function step(now) {
     if (window.__bot.stop) return;
@@ -59,7 +60,14 @@ const BOT = `(opts) => {
     // occasionally hold to listen when the marker is dark (the quiet)
     if (G.darkT > 0 && Math.random() < 0.02 && opts.listen) { down(); setTimeout(up, 500); cool = now + 700; listens++; return; }
     if (G.darkT > 0 && !opts.blind) return;
-    if (e <= G.hw * opts.skill) {
+    const inZ = e <= G.hw * opts.skill;
+    if (opts.pace) {                       // decide once per pass whether to take it
+      if (!inZ) { wasIn = false; return; }
+      if (wasIn) return;
+      wasIn = true;
+      if (Math.random() > opts.pace) return;
+    }
+    if (inZ) {
       const bad = Math.random() < opts.err;
       const delay = bad ? 200 + Math.random() * 250 : Math.random() * 40;
       setTimeout(() => { down(); setTimeout(up, 50); }, delay);
@@ -123,6 +131,23 @@ const report = {};
   await sleep(1500);
   await page.screenshot({ path: path.join(SHOTS, 'amontillado-win.png') });
   report.best = await page.evaluate(() => localStorage.getItem('poe:amontillado:best'));
+  await ctx.close();
+}
+
+/* ---- run 1b: desktop, human-paced skilled play (lets ~a third of passes go by) → how much torch is left? */
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+  const page = await ctx.newPage(); watch(page, 'paced');
+  await page.goto(base, { waitUntil: 'load' });
+  await page.evaluate(() => document.fonts.ready);
+  await sleep(800);
+  await page.keyboard.press('Space');
+  await sleep(1200);
+  await page.evaluate(`(${BOT})(${JSON.stringify({ skill: 0.7, err: 0.05, listen: true, pace: 0.65 })})`);
+  const t0 = Date.now();
+  const ended = await waitFor(page, () => window.__poe.G.state !== 'play', 300000, 500);
+  const info = await page.evaluate(() => window.__poe.info());
+  report.run1paced = { ...info, seconds: +((Date.now() - t0) / 1000).toFixed(1), taps: await page.evaluate(() => window.__bot.taps), ended };
   await ctx.close();
 }
 
