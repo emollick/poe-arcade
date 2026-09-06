@@ -392,5 +392,33 @@ export class HeartEngine {
   }
 
   get now() { return this.ctx ? this.ctx.currentTime : 0; }
-  get latency() { return this.ctx ? ((this.ctx.outputLatency || 0) + (this.ctx.baseLatency || 0)) : 0; }
+
+  /** Reported output latency, clamped to something a real device could have.
+   * Headless / virtual sinks and some Bluetooth stacks report nonsense here
+   * (0, NaN, or half a second); the judge must never inherit that. */
+  get latency() {
+    if (!this.ctx) return 0;
+    const l = (+this.ctx.outputLatency || 0) + (+this.ctx.baseLatency || 0);
+    return Number.isFinite(l) ? Math.min(0.12, Math.max(0, l)) : 0;
+  }
+
+  /** The audio-stream time that was coming out of the speaker at wall-clock
+   * `perfMs` (a performance.now() stamp, e.g. an input event's timeStamp).
+   * Uses getOutputTimestamp() when the browser provides a sane one, so the
+   * judgement does not depend on when the main thread got round to running the
+   * handler, nor on a misreported latency figure. */
+  heardAt(perfMs = performance.now()) {
+    const ctx = this.ctx;
+    if (!ctx) return 0;
+    const cur = ctx.currentTime;
+    const wall = performance.now();
+    let ots = null;
+    try { ots = ctx.getOutputTimestamp ? ctx.getOutputTimestamp() : null; } catch {}
+    if (ots && ots.performanceTime > 0 && Number.isFinite(ots.contextTime) && wall - ots.performanceTime < 250) {
+      const est = ots.contextTime + (perfMs - ots.performanceTime) / 1000;
+      // sane only if it sits a little behind the scheduling clock
+      if (est <= cur + 0.01 && est >= cur - 0.25) return est;
+    }
+    return cur - (wall - perfMs) / 1000 - this.latency;
+  }
 }

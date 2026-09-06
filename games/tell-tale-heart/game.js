@@ -14,10 +14,10 @@ const INK   = '#030303';
 const BONE  = '#e6dcc6';
 const BLOOD = '#6e1a1c';
 const VEIL  = '#8fb3c9';
+const LAMP  = '#e9cf98';      // the lantern's light on the boards
 
 const DUR = 76;               // seconds of game time to dawn
-const PERFECT = 0.075;        // seconds either side of the beat
-const GOOD    = 0.15;
+const GOOD    = 0.15;         // seconds either side of the beat
 const BEST_KEY = 'tell-tale-heart:best';
 
 const CAPTIONS = [
@@ -44,8 +44,8 @@ function layout() {
   const eyeW = m ? Math.min(W * 0.78, H * 0.36) : Math.min(W * 0.44, H * 0.58);
   const eyeY = m ? H * 0.26 : H * 0.32;
   const ringR = m ? Math.min(W * 0.17, H * 0.075) : Math.min(W, H) * 0.085;
-  const ringY = m ? H * 0.64 : H * 0.70;
-  const boardsY = m ? H * 0.56 : H * 0.60;
+  const ringY = m ? H * 0.55 : H * 0.70;
+  const boardsY = m ? H * 0.465 : H * 0.60;
   L = {
     m, eyeW, eyeX: W / 2, eyeY,
     meterY: eyeY + eyeW * 0.30 + (m ? 34 : 40),
@@ -160,6 +160,8 @@ const G = {
   nextBeat: 0,            // audio time of next beat to schedule
   lastBeat: 0,            // audio time of last real beat (for the ring)
   lastInterval: 1.2,
+  heard: 0,               // audio-stream time being heard this frame
+  shadowX: [0, 0, 0],     // where each officer's shadow lies across the lamplight
   nextTick: 0,
   tickN: 0,
   nextChatter: 0,
@@ -199,6 +201,9 @@ function planWindows() {
 }
 
 function bpmAt(u) { return 54 + 98 * Math.pow(Math.max(0, u), 1.2); }
+/* The perfect window. A first night is ±90 ms, easing to ±80 ms by dawn; once
+ * a score is on the books it is ±75 ms all night. Fair, not easy. */
+function perfectWindow(u) { return best.score ? 0.075 : lerp(0.09, 0.08, clamp01(u)); }
 function irregularityAt(u) { return Math.max(0, Math.min(1, (u - 0.48) / 0.42)); }
 
 function startGame() {
@@ -212,7 +217,7 @@ function startGame() {
     beatsHit: 0, perfects: 0, misses: 0, tells: 0, beats: [], nextBeat: now + 0.9, lastBeat: now + 0.9,
     lastInterval: 60 / bpmAt(0), nextTick: now + 0.4, tickN: 0, nextChatter: now + 2.5,
     windows: planWindows(), win: null, warn: 0, endAt: 0, finalBeatAt: 0, judgments: [], shocks: [],
-    caption: null, captionIdx: 0, officers: [1, 1, 1], flash: 0, relax: 0,
+    caption: null, captionIdx: 0, officers: [1, 1, 1], flash: 0, relax: 0, heard: now, shadowX: [0, 0, 0],
   });
   heart.setPressure(0, 0.05);
   clearInterval(G.timer);
@@ -280,7 +285,7 @@ function bumpComposure(d) {
 
 function mult() { return 1 + Math.min(7, Math.floor(G.streak / 6)); }
 
-function tap() {
+function tap(evt) {
   const now = performance.now();
   if (now < G.lockUntil) return;
   if (G.state === 'title') {
@@ -293,8 +298,11 @@ function tap() {
   if (G.state === 'confess' || G.state === 'dawn') { G.lockUntil = now + 300; startGame(); return; }
   if (G.state !== 'play') return;
 
-  const t = heart.now;
-  const gt = (t - G.startAt) * G.speed;
+  // judge against what was coming out of the speaker when the finger landed,
+  // not against when this handler finally ran
+  const stamp = evt && Number.isFinite(evt.timeStamp) && evt.timeStamp > 0 && now - evt.timeStamp < 400 ? evt.timeStamp : now;
+  const t = heart.heardAt(stamp);
+  const gt = (heart.now - G.startAt) * G.speed;
 
   // watched: any tap is a tell
   const w = G.win;
@@ -309,18 +317,17 @@ function tap() {
     return;
   }
 
-  const lat = heart.latency;
   let bestB = null, bestD = 1e9;
   for (const b of G.beats) {
     if (b.judged) continue;
-    const d = t - (b.t + lat);
+    const d = t - b.t;
     if (Math.abs(d) < Math.abs(bestD)) { bestD = d; bestB = b; }
   }
   if (bestB && Math.abs(bestD) <= GOOD) {
     bestB.judged = true;
     if (bestB.free) { heart.knock('good'); return; }
     G.beatsHit++;
-    if (Math.abs(bestD) <= PERFECT) {
+    if (Math.abs(bestD) <= perfectWindow(G.u)) {
       G.streak++;
       G.bestStreak = Math.max(G.bestStreak, G.streak);
       G.perfects++;
@@ -345,11 +352,10 @@ function tap() {
   }
 }
 
-function judgeMisses(t) {
-  const lat = heart.latency;
+function judgeMisses(heard) {
   for (const b of G.beats) {
     if (b.judged) continue;
-    if (t > b.t + lat + GOOD) {
+    if (heard > b.t + GOOD) {
       b.judged = true;
       if (b.free) continue;
       G.misses++;
@@ -360,7 +366,7 @@ function judgeMisses(t) {
     }
   }
   // prune
-  while (G.beats.length && G.beats[0].judged && G.beats[0].t < t - 2) G.beats.shift();
+  while (G.beats.length && G.beats[0].judged && G.beats[0].t < heard - 2) G.beats.shift();
 }
 
 /* ---------- endings ------------------------------------------------------ */
@@ -430,11 +436,11 @@ function resume() {
 
 addEventListener('pointerdown', (e) => {
   if (e.target && e.target.closest && e.target.closest('.poe-back')) return;
-  tap();
+  tap(e);
 });
 addEventListener('keydown', (e) => {
   if (e.repeat) return;
-  if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); tap(); }
+  if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); tap(e); }
   else if (e.code === 'KeyM') { muted = !muted; audio.setMuted(muted); }
   else if (e.code === 'KeyR' && (G.state === 'confess' || G.state === 'dawn')) { G.lockUntil = 0; tap(); }
 });
@@ -456,21 +462,23 @@ function update(dtMs) {
 
   if (G.state === 'play') {
     const now = heart.now;
+    const heard = heart.heardAt();
+    G.heard = heard;
     G.t = (now - G.startAt) * G.speed;
     G.u = Math.min(1, G.t / DUR);
     const u = G.u;
 
-    // passing beats
+    // passing beats: the picture moves when the sound is heard, not when it is scheduled
     for (const b of G.beats) {
-      if (!b.seen && now >= b.t + heart.latency) {
+      if (!b.seen && heard >= b.t) {
         b.seen = true;
         G.lastInterval = Math.max(0.25, b.t - G.lastBeat);
-        G.lastBeat = b.t + heart.latency;
-        G.shocks.push({ at: now, free: b.free });
+        G.lastBeat = b.t;
+        G.shocks.push({ at: heard, free: b.free });
         if (G.shocks.length > 5) G.shocks.shift();
       }
     }
-    judgeMisses(now);
+    judgeMisses(heard);
 
     // watched windows
     let win = null, warn = 0;
@@ -531,8 +539,12 @@ function synthWave(time) {
 const fmt = (n) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const lerp = (a, b, t) => a + (b - a) * t;
-const rgba = (hex, a) => {
-  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+const rgba = (c, a) => {
+  if (c[0] !== '#') { // an rgb(r,g,b) string from mix()
+    const m = c.match(/[\d.]+/g);
+    return `rgba(${m[0]},${m[1]},${m[2]},${a})`;
+  }
+  const r = parseInt(c.slice(1, 3), 16), g = parseInt(c.slice(3, 5), 16), b = parseInt(c.slice(5, 7), 16);
   return `rgba(${r},${g},${b},${a})`;
 };
 const mix = (h1, h2, t) => {
@@ -712,11 +724,14 @@ function drawEye(ex, ey, ew, open, gaze, watch, pressure) {
   }
 }
 
-/* Floorboards: seams that bulge with the live waveform under the ring. */
-function drawBoards(pressure, bulgeX, bulgeY, ampPx) {
+/* Floorboards: seams that bulge with the live waveform under the ring, and
+ * that ride up over `ridge` — a ring-shaped swelling under the planks that
+ * closes in on the burial spot with every beat (the approach ring, in wood). */
+function drawBoards(pressure, bulgeX, bulgeY, ampPx, ridge) {
   const { seams, grain, ends } = boards;
   const w = V.wave;
   const n = w.length;
+  boards.paths = [];
 
   // blood seeping up between the boards as the pressure rises
   if (pressure > 0.2) {
@@ -736,21 +751,30 @@ function drawBoards(pressure, bulgeX, bulgeY, ampPx) {
   }
   // seams
   const sig = Math.max(140, W * 0.22);
+  const rr = ridge ? ridge.r : 0, rAmp = ridge ? ridge.amp : 0, rSig = ridge ? ridge.sigma : 1;
   for (let k = 0; k < seams.length; k++) {
     const y0 = seams[k];
     const depth = 1 - Math.abs(y0 - bulgeY) / (H - L.boardsY);
     const rowAmp = ampPx * Math.max(0.15, depth);
+    const dy0 = y0 - bulgeY;
+    const near = rAmp > 0 && Math.abs(dy0) < rr + rSig * 3;
     cx.strokeStyle = rgba(BONE, 0.22 + 0.12 * (k / seams.length));
     cx.lineWidth = 1 + k * 0.12;
-    cx.beginPath();
+    const path = new Path2D();
     const step = 6;
     for (let x = 0; x <= W + step; x += step) {
       const g = Math.exp(-((x - bulgeX) * (x - bulgeX)) / (2 * sig * sig));
       const i = Math.floor((x / W) * (n - 1));
-      const y = y0 - w[i] * rowAmp * g;
-      if (x === 0) cx.moveTo(x, y); else cx.lineTo(x, y);
+      let y = y0 - w[i] * rowAmp * g;
+      if (near) {
+        const dx = x - bulgeX;
+        const d = Math.sqrt(dx * dx + dy0 * dy0) - rr;
+        y -= rAmp * Math.exp(-(d * d) / (2 * rSig * rSig));
+      }
+      if (x === 0) path.moveTo(x, y); else path.lineTo(x, y);
     }
-    cx.stroke();
+    cx.stroke(path);
+    boards.paths.push(path);
   }
   // board ends
   cx.strokeStyle = rgba(BONE, 0.16);
@@ -758,19 +782,44 @@ function drawBoards(pressure, bulgeX, bulgeY, ampPx) {
   for (const e of ends) { cx.beginPath(); cx.moveTo(e.x, e.a); cx.lineTo(e.x, e.b); cx.stroke(); }
 }
 
-/* Three officers: hats and shoulders along the top. */
+/* Three officers. On desktop: hats and shoulders along the top. On a phone
+ * they sit at the bottom edge of the frame, faces turned up toward you, and
+ * sink out of the picture when they leave. */
 function drawOfficers(t) {
-  const xs = L.m ? [0.30, 0.5, 0.70] : [0.38, 0.5, 0.62];
-  const y = L.m ? 64 : 58;
-  const s = L.m ? 0.8 : 1;
+  const m = L.m;
+  const xs = m ? [0.22, 0.5, 0.78] : [0.38, 0.5, 0.62];
+  const y = m ? H - 46 : 58;
+  const s = m ? 1.35 : 1;
   for (let i = 0; i < 3; i++) {
     const p = G.officers[i];
     if (p <= 0) continue;
     const x = W * xs[i];
-    const lift = (1 - p) * 40;
-    const watching = G.win && G.win.side === i - 1 ? 1 : (G.warn > 0 ? 0 : 0);
-    cx.globalAlpha = 0.34 * p;
+    const lift = (1 - p) * (m ? -90 : 40);
+    const watching = G.win && G.win.side === i - 1 ? 1 : 0;
+    const sway = m ? Math.sin(t * 0.7 + i * 2.3) * 1.5 : 0;
+    cx.globalAlpha = (m ? 0.42 : 0.34) * p;
     cx.fillStyle = BONE;
+    if (m) {
+      // seen from above: the hat's crown, its brim, the upturned face, shoulders
+      const hy = y - 30 * s - lift + sway;
+      cx.fillRect(x - 12 * s, hy - 10 * s, 24 * s, 9 * s);                  // crown
+      cx.beginPath(); cx.ellipse(x, hy, 19 * s, 4 * s, 0, 0, Math.PI * 2); cx.fill(); // brim
+      cx.beginPath(); cx.ellipse(x, hy + 9 * s, 8 * s, 8.5 * s, 0, 0, Math.PI * 2); cx.fill(); // face
+      cx.beginPath();
+      cx.moveTo(x - 30 * s, y + 30 * s - lift);
+      cx.quadraticCurveTo(x - 28 * s, hy + 14 * s, x - 10 * s, hy + 15 * s);
+      cx.lineTo(x + 10 * s, hy + 15 * s);
+      cx.quadraticCurveTo(x + 28 * s, hy + 14 * s, x + 30 * s, y + 30 * s - lift);
+      cx.closePath(); cx.fill();
+      cx.globalAlpha = 1;
+      // eyes, looking up: dark normally, the veil's blue when one fixes on you
+      cx.fillStyle = watching ? VEIL : INK;
+      if (watching) cx.globalAlpha = 0.75 + 0.25 * Math.sin(t * 12); else cx.globalAlpha = 0.9 * p;
+      cx.beginPath(); cx.ellipse(x - 3.2 * s, hy + 8 * s, 1.7 * s, 1.1 * s, 0, 0, Math.PI * 2); cx.fill();
+      cx.beginPath(); cx.ellipse(x + 3.2 * s, hy + 8 * s, 1.7 * s, 1.1 * s, 0, 0, Math.PI * 2); cx.fill();
+      cx.globalAlpha = 1;
+      continue;
+    }
     // hat
     cx.fillRect(x - 12 * s, y - 26 * s - lift, 24 * s, 12 * s);
     cx.fillRect(x - 18 * s, y - 14 * s - lift, 36 * s, 2.5 * s);
@@ -793,55 +842,122 @@ function drawOfficers(t) {
   }
 }
 
-function drawRing(now) {
+/* Where the approach ridge is this frame: radius closes from ~2.1R to R on the
+ * beat, exactly the easing the old ring used, so the timing reads the same. */
+function ridgeNow(heard) {
+  const R = L.ringR;
+  const phase = clamp01((heard - G.lastBeat) / G.lastInterval);
+  const r = R * (1 + 1.1 * (1 - phase) * (1 - phase));
+  const amp = (L.m ? 4.5 : 6) * (0.7 + 0.6 * G.u) * (reduceMotion ? 0.5 : 1);
+  return { r, amp, sigma: L.m ? 5 : 6.5, phase };
+}
+
+/* An embossed arc: a ridge in the planks, lit from above — bone on the upper
+ * edge, ink beneath. */
+function ridgeArc(x, y, r, alpha, width) {
+  cx.lineWidth = width;
+  cx.strokeStyle = rgba('#000000', 0.85 * alpha);
+  cx.beginPath(); cx.arc(x, y + width * 0.9, r, 0, Math.PI * 2); cx.stroke();
+  cx.strokeStyle = rgba(BONE, 0.55 * alpha);
+  cx.beginPath(); cx.arc(x, y, r, 0, Math.PI * 2); cx.stroke();
+}
+
+function drawRing(heard, t) {
   const { ringX: x, ringY: y, ringR: R } = L;
+  const m = L.m;
   const watched = !!G.win;
   const pressure = G.u;
   const col = watched ? VEIL : mix(BONE, BLOOD, Math.pow(pressure, 1.4) * 0.85);
+  const lampCol = watched ? VEIL : mix(LAMP, BLOOD, Math.pow(pressure, 1.6) * 0.55);
 
-  // approach ring from the nominal tempo (the eye counts; the ear must listen)
-  const phase = clamp01((now - G.lastBeat) / G.lastInterval);
-  const r = R * (1 + 1.1 * (1 - phase) * (1 - phase));
-  cx.strokeStyle = watched ? rgba(VEIL, 0.28) : rgba(BONE, 0.28);
-  cx.lineWidth = 1;
-  cx.beginPath(); cx.arc(x, y, r, 0, Math.PI * 2); cx.stroke();
+  /* The target is the lantern's circle of light on the boards, over the place
+   * where he lies. It brightens with the beat; the planks inside it are lit. */
+  const glow = 0.13 + V.env * 0.22 + G.relax * 0.08;
+  const pool = cx.createRadialGradient(x, y - R * 0.15, 0, x, y, R);
+  pool.addColorStop(0, rgba(lampCol, glow * 1.1));
+  pool.addColorStop(0.75, rgba(lampCol, glow * 0.8));
+  pool.addColorStop(1, rgba(lampCol, glow * 0.25));
+  cx.fillStyle = pool;
+  cx.beginPath(); cx.arc(x, y, R, 0, Math.PI * 2); cx.fill();
+  cx.save();
+  cx.beginPath(); cx.arc(x, y, R, 0, Math.PI * 2); cx.clip();
+  if (boards.paths) {
+    cx.strokeStyle = rgba(lampCol, 0.5 + V.env * 0.3);
+    cx.lineWidth = 1.2;
+    for (const p of boards.paths) cx.stroke(p);
+  }
+  // the heart under the boards: a dark pulse in the middle of the light
+  const g = cx.createRadialGradient(x, y, 0, x, y, R * 0.95);
+  g.addColorStop(0, rgba(watched ? VEIL : BLOOD, 0.18 + V.env * 0.6 * (0.3 + pressure)));
+  g.addColorStop(1, rgba(BLOOD, 0));
+  cx.fillStyle = g;
+  cx.fillRect(x - R, y - R, R * 2, R * 2);
 
-  // shockwaves on the real beats
-  for (const s of G.shocks) {
-    const a = (now - s.at) / 0.55;
+  // the officers' shadows fall across the light. Each drifts as its man
+  // shifts in his chair; the one who turns on you plants his over the spot.
+  for (let i = 0; i < 3; i++) {
+    const p = G.officers[i];
+    if (p <= 0) continue;
+    const mine = G.win && G.win.side === i - 1;
+    const warnMine = !G.win && G.warn > 0;
+    const drift = x + Math.sin(t * 0.11 + i * 2.1) * R * 1.15 + (i - 1) * R * 0.5;
+    const target = mine ? x : warnMine ? lerp(drift, x, G.warn * 0.5) : drift;
+    if (!G.shadowX[i]) G.shadowX[i] = target;
+    G.shadowX[i] += (target - G.shadowX[i]) * (mine ? 0.18 : 0.06);
+    const sx = G.shadowX[i];
+    const lean = Math.sin(t * 0.5 + i) * 0.08 + (mine ? 0 : 0.15 * (i - 1));
+    const a = (mine ? 0.55 + 0.1 * Math.sin(t * 9) : 0.26) * p;
+    cx.fillStyle = rgba('#000000', a);
+    cx.beginPath();
+    // a long man-shaped wedge cast up the boards: shoulders wide at the far edge, hat at the near
+    const top = y + R * 1.05, hat = y - R * 0.95;
+    cx.moveTo(sx - R * 0.42, top);
+    cx.lineTo(sx + R * 0.42, top);
+    cx.lineTo(sx + R * 0.2 + lean * R, hat + R * 0.55);
+    cx.lineTo(sx + R * 0.24 + lean * R, hat + R * 0.45);
+    cx.lineTo(sx + R * 0.13 + lean * R, hat + R * 0.28);
+    cx.lineTo(sx + R * 0.17 + lean * R, hat + R * 0.02);
+    cx.lineTo(sx - R * 0.17 + lean * R, hat + R * 0.02);
+    cx.lineTo(sx - R * 0.13 + lean * R, hat + R * 0.28);
+    cx.lineTo(sx - R * 0.24 + lean * R, hat + R * 0.45);
+    cx.lineTo(sx - R * 0.2 + lean * R, hat + R * 0.55);
+    cx.closePath(); cx.fill();
+  }
+  cx.restore();
+
+  // shockwaves on the real beats: the planks heave outward from the spot
+  for (const sh of G.shocks) {
+    const a = (heard - sh.at) / 0.55;
     if (a < 0 || a > 1) continue;
-    cx.strokeStyle = rgba(s.free ? VEIL : (pressure > 0.6 ? BLOOD : BONE), (1 - a) * 0.6);
-    cx.lineWidth = 2 + (1 - a) * 4;
-    cx.beginPath(); cx.arc(x, y, R * (1 + a * 1.6), 0, Math.PI * 2); cx.stroke();
+    ridgeArc(x, y, R * (1 + a * 1.6), (1 - a) * (sh.free ? 0.45 : 0.75), 1.5 + (1 - a) * 2.5);
   }
 
-  // the target ring, breathing with the analyser
+  // the approach: the swelling under the boards closing in on the light
+  const ridge = ridgeNow(heard);
+  if (ridge.r > R + 1.5) ridgeArc(x, y, ridge.r, 0.55 + 0.35 * ridge.phase, 1.5 + ridge.amp * 0.25);
+
+  // the light's edge: the target ring, breathing with the analyser
   const thick = 2.5 + V.env * 6 + G.relax * 2;
   cx.strokeStyle = col;
   cx.lineWidth = thick;
-  if (watched) cx.setLineDash([4, 6]);
   cx.beginPath(); cx.arc(x, y, R + V.env * 4, 0, Math.PI * 2); cx.stroke();
-  cx.setLineDash([]);
+  // and a soft halo just outside it, where the lamplight dies on the wood
+  cx.strokeStyle = rgba(lampCol, 0.10 + V.env * 0.1);
+  cx.lineWidth = thick * 2.4;
+  cx.beginPath(); cx.arc(x, y, R + thick * 1.2, 0, Math.PI * 2); cx.stroke();
 
-  // the heart inside: a dark pulse
-  const g = cx.createRadialGradient(x, y, 0, x, y, R * 0.95);
-  g.addColorStop(0, rgba(watched ? VEIL : BLOOD, 0.15 + V.env * 0.6 * (0.3 + pressure)));
-  g.addColorStop(1, rgba(BLOOD, 0));
-  cx.fillStyle = g;
-  cx.beginPath(); cx.arc(x, y, R * 0.95, 0, Math.PI * 2); cx.fill();
-
-  // instruction under / over the ring
+  // instruction over the light
   if (watched) {
-    const blink = 0.6 + 0.4 * Math.sin(performance.now() / 90);
-    shuddered('HOLD STILL', x, y - R - (L.m ? 22 : 26), L.m ? 17 : 20, { sc: true, color: rgba(VEIL, blink), k: 1.5 });
+    const blink = 0.78 + 0.22 * Math.sin(performance.now() / 90);
+    shuddered('HOLD STILL', x, y - R - (m ? 13 : 16), m ? 18 : 22, { sc: true, color: rgba(VEIL, blink), k: 1.5 });
   } else if (G.warn > 0) {
-    shuddered('he turns', x, y - R - (L.m ? 22 : 26), L.m ? 15 : 17, { italic: true, color: rgba(VEIL, 0.5 + 0.5 * G.warn), k: 1 });
+    shuddered('he turns', x, y - R - (m ? 13 : 16), m ? 17 : 19, { italic: true, color: rgba(VEIL, 0.5 + 0.5 * G.warn), k: 1 });
   }
 
   // streak + multiplier
   if (G.streak >= 3) {
     shuddered(`×${mult()}`, x, y + 2, Math.round(R * 0.62), { sc: true, color: rgba(BONE, 0.9), k: 2 });
-    shuddered(`${G.streak} steady`, x, y + R + 18, 13, { italic: true, color: rgba(BONE, 0.55), k: 1 });
+    shuddered(`${G.streak} steady`, x, y + R + (m ? 22 : 26), m ? 15 : 17, { italic: true, color: rgba(BONE, 0.8), k: 1 });
   }
 
   // judgments
@@ -849,10 +965,10 @@ function drawRing(now) {
   for (const j of G.judgments) {
     const a = (pn - j.at) / 700;
     if (a > 1) continue;
-    const color = j.kind === 'perfect' ? BONE : j.kind === 'tell' ? VEIL : j.kind === 'miss' ? '#b04a4c' : rgba(BONE, 0.7);
+    const color = j.kind === 'perfect' ? BONE : j.kind === 'tell' ? VEIL : j.kind === 'miss' ? '#b04a4c' : rgba(BONE, 0.8);
     cx.globalAlpha = 1 - a * a;
-    const size = j.kind === 'tell' ? 26 : 18;
-    shuddered(j.text, x + R * 1.5 + (L.m ? 8 : 26), y - a * 22, size, { sc: j.kind === 'tell', italic: j.kind !== 'tell', color, align: 'left', k: 1 });
+    const size = j.kind === 'tell' ? 28 : 20;
+    shuddered(j.text, x + R * 1.5 + (m ? 8 : 26), y - a * 22, size, { sc: j.kind === 'tell', italic: j.kind !== 'tell', color, align: 'left', k: 1 });
     cx.globalAlpha = 1;
   }
 }
@@ -875,23 +991,27 @@ function drawMeter() {
   cx.strokeStyle = rgba(BONE, 0.35);
   cx.lineWidth = 1;
   cx.beginPath(); cx.moveTo(x0, y - 5); cx.lineTo(x0, y + 5); cx.moveTo(x0 + w, y - 5); cx.lineTo(x0 + w, y + 5); cx.stroke();
-  shuddered('composure', W / 2, y + 16, 13, { sc: true, color: rgba(BONE, low ? 0.9 : 0.45), k: low ? 2 : 0.5 });
+  shuddered('composure', W / 2, y + (L.m ? 15 : 19), L.m ? 14 : 17, { sc: true, color: rgba(BONE, low ? 0.95 : 0.8), k: low ? 2 : 0.5 });
 }
 
 function drawHUD() {
   const m = L.m;
-  const right = W - (m ? 16 : 34), top = m ? 54 : 30;
-  shuddered(fmt(G.score), right, top + 14, m ? 24 : 30, { align: 'right', k: 1.2 });
-  shuddered(best.score ? `best ${fmt(best.score)}` : 'first night', right, top + (m ? 38 : 44), 13, { align: 'right', italic: true, color: rgba(BONE, 0.72), k: 0.5 });
+  const right = W - (m ? 18 : 36), top = m ? 56 : 30;
+  // IM Fell's figures are old-style (x-height digits), so the block runs a
+  // little larger than a lining face would need to read at a glance
+  const scoreSz = m ? 30 : 36, lineSz = m ? 14 : 16;
+  const ink80 = rgba(BONE, 0.8);
+  shuddered(fmt(G.score), right, top + scoreSz * 0.55, scoreSz, { sc: true, align: 'right', color: ink80, k: 1.2 });
+  shuddered(best.score ? `best ${fmt(best.score)}` : 'first night', right, top + scoreSz * 0.55 + lineSz * 1.9, lineSz, { align: 'right', italic: true, color: ink80, k: 0.5 });
   // hour: the night wears on
   const pct = Math.round(G.u * 100);
-  shuddered(`${pct}% to dawn`, right, top + (m ? 56 : 64), 12, { align: 'right', sc: true, color: rgba(BONE, 0.62), k: 0.5 });
+  shuddered(`${pct}% to dawn`, right, top + scoreSz * 0.55 + lineSz * 3.5, lineSz, { align: 'right', sc: true, color: ink80, k: 0.5 });
 
-  // caption over the boards
+  // caption: over the boards on desktop; on a phone it sits with the officers
   if (G.caption) {
     const a = (performance.now() - G.caption.at) / 1000;
     const alpha = a < 0.5 ? a * 2 : a < 3.6 ? 1 : Math.max(0, 1 - (a - 3.6) / 0.8);
-    if (alpha > 0) shuddered(G.caption.text, W / 2, H - (m ? 40 : 34), m ? 17 : 21, { italic: true, color: rgba(BONE, 0.8 * alpha), k: 1 });
+    if (alpha > 0) shuddered(G.caption.text, W / 2, m ? H - 128 : H - 34, m ? 18 : 22, { italic: true, color: rgba(BONE, 0.85 * alpha), k: 1 });
   }
 }
 
@@ -1067,11 +1187,11 @@ function render(t) {
       g.addColorStop(0, rgba(VEIL, 0.13 * a)); g.addColorStop(1, rgba(VEIL, 0));
       cx.fillStyle = g; cx.fillRect(0, 0, W, H * 0.35);
     }
-    drawBoards(pressure, L.ringX, L.ringY, (L.m ? 22 : 34) * (0.5 + u) * (0.4 + V.level));
+    drawBoards(pressure, L.ringX, L.ringY, (L.m ? 22 : 34) * (0.5 + u) * (0.4 + V.level), ridgeNow(G.heard));
     drawEye(L.eyeX, L.eyeY, L.eyeW, Math.min(0.95, open), gaze, watch, pressure);
     drawOfficers(t);
     drawMeter();
-    drawRing(now);
+    drawRing(G.heard, t);
     drawHUD();
     if (G.state === 'paused') {
       cx.fillStyle = rgba('#000000', 0.6); cx.fillRect(0, 0, W, H);
@@ -1126,10 +1246,12 @@ window.__poe = {
   get watched() { return !!G.win; },
   get level() { return { level: +V.level.toFixed(3), env: +V.env.toFixed(3), peak: +(heart.peak || 0).toFixed(3) }; },
   get stats() { return { hit: G.beatsHit, perfects: G.perfects, misses: G.misses, tells: G.tells, streak: G.streak }; },
-  now: () => heart.now,
+  /** the audio-stream time being heard right now: the clock taps are judged on */
+  now: () => heart.heardAt(),
   latency: () => heart.latency,
-  /** upcoming judged beats as audio times, plus whether they are free (watched) */
-  upcoming: () => G.beats.filter((b) => !b.judged).map((b) => ({ t: b.t + heart.latency, free: b.free })),
+  perfect: () => perfectWindow(G.u),
+  /** upcoming judged beats as heard-clock times, plus whether they are free (watched) */
+  upcoming: () => G.beats.filter((b) => !b.judged).map((b) => ({ t: b.t, free: b.free })),
   setSpeed: (k) => { k = Math.max(0.1, k); if (G.state === 'play') G.startAt = heart.now - G.t / k; G.speed = k; },
   start: () => { if (G.state === 'title') tap(); },
   tap,
