@@ -1,0 +1,84 @@
+# poe-arcade — Netlify configuration
+#
+# There is NO BUILD STEP. The repository is the deployable site: a fresh clone
+# with no toolchain installed deploys as-is. Any compiled artifact (e.g. a wasm
+# module) must be built locally and its OUTPUT COMMITTED under /wasm/, so this
+# stays true.
+
+[build]
+  publish = "."
+  command = ""
+
+# --- HTML: always revalidate -------------------------------------------------
+# Games and the launcher change often; never let a CDN pin a stale page.
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/games/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# --- Immutable assets --------------------------------------------------------
+# /vendor/* is pinned third-party code and self-hosted fonts. /shared/* is the
+# common chrome. Both are safe to cache hard; bump a query string to bust.
+
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/shared/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Fonts need a permissive CORS header to be usable cross-origin (e.g. a Netlify
+# deploy-preview domain embedding the primary one).
+[[headers]]
+  for = "/vendor/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+    Access-Control-Allow-Origin = "*"
+
+# --- Correct types for wasm, should a /wasm/ folder appear later -------------
+# Streaming instantiation (WebAssembly.instantiateStreaming) REQUIRES
+# application/wasm; without it the browser refuses the module.
+
+[[headers]]
+  for = "/wasm/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.wasm"
+  [headers.values]
+    Content-Type = "application/wasm"
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# --- Site-wide safety headers ------------------------------------------------
+# Deliberately NOT set: Cross-Origin-Opener-Policy / Cross-Origin-Embedder-Policy.
+# Enabling COOP+COEP would cross-origin-isolate the site and break any script,
+# font or texture that is not served with CORP/CORS. We do not need
+# SharedArrayBuffer, so the cost is all downside.
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "accelerometer=(self), gyroscope=(self), camera=(), microphone=(), geolocation=(), payment=(), usb=(), midi=(), interest-cohort=()"
+
+# --- Redirects ---------------------------------------------------------------
+# NONE. Deep links to /games/<name>/ must resolve straight to that directory's
+# index.html. A catch-all SPA rewrite (/* -> /index.html) would silently send
+# every game URL to the launcher, so do not add one.

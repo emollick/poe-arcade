@@ -1,0 +1,159 @@
+/* poe-arcade — shared/poe.css
+ * The COMMON CHROME ONLY. Deliberately minimal.
+ *
+ * Every game owns its own art direction: its own palette, typography, buttons,
+ * title screens and motion. Nothing in this file should homogenize that.
+ * What lives here is only what must be identical across the cabinet:
+ *   1. the reset,  2. neutral overridable custom properties,
+ *   3. the back-to-launcher link,  4. the rotate hint,  5. the focus ring.
+ *
+ * Link with: <link rel="stylesheet" href="/shared/poe.css">
+ */
+
+/* ---------- 1. reset ---------------------------------------------------- */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+}
+
+body {
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ---------- 2. neutral custom properties -------------------------------- */
+/* Starting points, not a theme. Override them freely inside your own game. */
+
+:root {
+  --ink:   #0a0908;
+  --bone:  #e8e2d4;
+  --blood: #7a0f12;
+  --brass: #b08d3f;
+}
+
+/* ---------- 3. .poe-back ------------------------------------------------ */
+/* A small fixed back-to-launcher link. Injected by poe.js `mountBack()`.
+ * Legible on both dark and light game backgrounds: a semi-transparent dark
+ * plate plus a backdrop blur, so it never disappears into the artwork.
+ * Sits inside the safe area on notched phones and keeps a >=44x44px hit area. */
+
+.poe-back {
+  position: fixed;
+  z-index: 2147483000;
+  top:  calc(env(safe-area-inset-top,  0px) + 10px);
+  left: calc(env(safe-area-inset-left, 0px) + 10px);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 14px;
+
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-decoration: none;
+
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(10, 9, 8, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 22px;
+  -webkit-backdrop-filter: blur(8px) saturate(1.2);
+  backdrop-filter: blur(8px) saturate(1.2);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+
+  opacity: 0.38;
+  transition: opacity 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+.poe-back:hover,
+.poe-back:focus-visible,
+.poe-back:active {
+  opacity: 1;
+  background: rgba(10, 9, 8, 0.82);
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+/* Touch devices have no hover, so never leave it near-invisible there. */
+@media (hover: none) {
+  .poe-back { opacity: 0.66; }
+}
+
+/* ---------- 4. .poe-rotate-hint ----------------------------------------- */
+/* For games that genuinely need landscape. Add the element, and it will show
+ * itself only in portrait on a narrow screen. Hidden everywhere else. */
+
+.poe-rotate-hint { display: none; }
+
+@media (orientation: portrait) and (max-width: 700px) {
+  .poe-rotate-hint {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 24px calc(24px + env(safe-area-inset-right, 0px))
+             24px calc(24px + env(safe-area-inset-left,  0px));
+    text-align: center;
+    background: #000;
+    color: rgba(232, 226, 212, 0.9);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    letter-spacing: 0.04em;
+  }
+
+  .poe-rotate-hint::before {
+    content: "";
+    width: 46px;
+    height: 74px;
+    border: 2px solid currentColor;
+    border-radius: 8px;
+    opacity: 0.7;
+    animation: poe-rotate-nudge 2.6s ease-in-out infinite;
+  }
+}
+
+@keyframes poe-rotate-nudge {
+  0%, 40%  { transform: rotate(0deg); }
+  60%, 90% { transform: rotate(-90deg); }
+  100%     { transform: rotate(-90deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poe-rotate-hint::before { animation: none; transform: rotate(-90deg); }
+}
+
+/* ---------- 5. shared focus ring ---------------------------------------- */
+
+:focus-visible {
+  outline: 2px solid rgba(232, 226, 212, 0.85);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Utility: visually hidden but available to screen readers. */
+.poe-sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

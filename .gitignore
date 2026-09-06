@@ -1,0 +1,17 @@
+node_modules/
+tools/node_modules/
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+.netlify/
+.cache/
+# Rust build output, if a game ever needs a wasm module.
+# The COMPILED .wasm must still be committed under /wasm/ — the deploy has no
+# build step — but the 200MB target/ directory must not be.
+target/
+**/target/
+
+# verify.mjs output. Regenerated on every run by every worker in parallel, so
+# committing them only produces binary merge conflicts. The directory is kept.
+screenshots/*.png
