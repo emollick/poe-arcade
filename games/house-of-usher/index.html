@@ -1,4 +1,46 @@
-<!doctype html><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>The Fall of the House of Usher</title>
-<!-- PLACEHOLDER. Story: The Fall of the House of Usher (games/house-of-usher/). Overwrite this file entirely. -->
-<body style="background:#0a0908;color:#e8e2d4;font:16px/1.6 system-ui;display:grid;place-items:center;height:100vh;margin:0"><p>The Fall of the House of Usher — game pending</p>
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fissure — The Fall of the House of Usher</title>
+<link rel="stylesheet" href="/shared/fonts.css">
+<link rel="stylesheet" href="/shared/poe.css">
+<link rel="stylesheet" href="./style.css">
+
+<canvas id="gl"></canvas>
+<div id="stage" aria-label="The House of Usher"></div>
+
+<div id="hud" aria-live="off">
+  <div class="hud-top"><div class="hud-score" id="score">0</div><div class="hud-streak" id="streak"></div><div class="hud-time"><span class="n" id="time">1:10</span><span class="l">TO THE CAUSEWAY</span></div></div>
+  <div class="hud-meter"><div class="top">ROOF</div><div class="rail"></div><div class="fill" id="fill"></div><div class="tick"></div><div class="lbl">TARN</div></div>
+  <div class="hud-hint" id="hint"></div>
+</div>
+
+<section id="title" class="screen">
+  <div class="kicker">THE FALL OF THE HOUSE OF USHER<span>Edgar Allan Poe · 1839</span></div>
+  <h1 class="word">FISS<i>U</i>RE</h1>
+  <div class="rule"></div>
+  <p class="how">Tap the lit brace before it fades. Hold the house together until the narrator is clear.<br>Keys 1–6 work too. Miss, and the fissure runs.</p>
+  <p class="best" id="best"></p>
+  <button class="cta" id="start" type="button">BEGIN THE LAST NIGHT</button>
+</section>
+
+<section id="win" class="screen end" hidden>
+  <p class="verdict">THE HOUSE HELD</p>
+  <p class="quote">“From that chamber, and from that mansion, I fled aghast. The storm was still abroad in all its wrath as I found myself crossing the old causeway.”<small>EDGAR ALLAN POE</small></p>
+  <div class="tally" id="wintally"></div>
+  <div class="newbest" id="winbest">A NEW BEST</div>
+  <button class="cta" id="again1" type="button">AGAIN</button>
+</section>
+
+<section id="lose" class="screen end" hidden>
+  <p class="verdict">THE HOUSE OF USHER</p>
+  <p class="quote">“…and the deep and dank tarn at my feet closed sullenly and silently over the fragments of the <em>House of Usher</em>.”<small>EDGAR ALLAN POE</small></p>
+  <div class="tally" id="losetally"></div>
+  <div class="newbest" id="losebest">A NEW BEST</div>
+  <button class="cta" id="again2" type="button">AGAIN</button>
+</section>
+
+<button id="mute" type="button" aria-label="Mute">♪</button>
+<div id="nogl">This house needs WebGL2 to stand. Your browser could not raise it.</div>
+
+<script type="module" src="./game.js"></script>

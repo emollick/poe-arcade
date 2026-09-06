@@ -40,10 +40,11 @@ function fitFrames() {
 }
 addEventListener('resize', () => requestAnimationFrame(fitFrames), { passive: true });
 
-/* portrait phones look through a square window onto the middle of the plate */
+/* portrait phones look through a window onto the middle of the plate, framed so
+ * the chair and the whole lamp (the round timer) with its halo stay in shot */
 function fitPlate() {
   const portrait = innerWidth / innerHeight < 5 / 6;
-  plate.setAttribute('viewBox', portrait ? '320 0 760 900' : '0 0 1400 900');
+  plate.setAttribute('viewBox', portrait ? '350 0 780 900' : '0 0 1400 900');
   plate.setAttribute('preserveAspectRatio', portrait ? 'xMidYMid meet' : 'xMidYMax meet');
 }
 addEventListener('resize', fitPlate, { passive: true });

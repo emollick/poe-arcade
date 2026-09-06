@@ -1,0 +1,129 @@
+/* FISSURE — The Fall of the House of Usher
+ * Palette: stone #8a97a3 · fissure #a8121c · bone #e9e3d3 · ash #2a2d31 */
+:root {
+  --stone: #8a97a3;
+  --red: #a8121c;
+  --bone: #e9e3d3;
+  --ash: #2a2d31;
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+html, body { background: #06070a; color: var(--bone); }
+body { font-family: 'EB Garamond', 'Cormorant Garamond', Georgia, serif; -webkit-user-select: none; user-select: none; }
+
+#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#stage { position: fixed; inset: 0; overflow: hidden; cursor: crosshair; }
+
+/* ---------- brace marks ---------- */
+.mark {
+  position: absolute; left: 0; top: 0;
+  width: 60px; height: 60px; margin: -30px 0 0 -30px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 120ms linear;
+  will-change: transform, opacity;
+}
+.mark svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.mark .ring-bg { fill: none; stroke: rgba(233, 227, 211, 0.18); stroke-width: 1; }
+.mark .ring { fill: none; stroke: var(--bone); stroke-width: 1.6; stroke-linecap: butt;
+  stroke-dasharray: 150.8; stroke-dashoffset: 0; transform: rotate(-90deg); transform-origin: 50% 50%;
+  filter: drop-shadow(0 0 4px rgba(233,227,211,0.7)); }
+.mark .core { fill: var(--bone); opacity: 0.9; filter: drop-shadow(0 0 6px rgba(255,220,180,0.9)); }
+.mark .halo { fill: none; stroke: rgba(233,227,211,0.35); stroke-width: 0.7; }
+.mark .num {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  font-family: 'Cinzel', 'Marcellus SC', serif; font-weight: 400; font-size: 11px; letter-spacing: 0.08em;
+  color: var(--bone); opacity: 0.55; text-shadow: 0 0 6px rgba(0,0,0,0.9);
+}
+.mark.active { opacity: 1; }
+.mark.active .num { opacity: 0.85; }
+.mark.dim { opacity: 0.25; }
+.mark.dim .ring, .mark.dim .core { display: none; }
+.mark.refl { transform-origin: 50% 50%; }
+.mark.refl svg { transform: scaleY(-1); animation: waver 1.6s ease-in-out infinite; }
+.mark.refl .num { transform: translate(-50%, -50%) scaleY(-1); opacity: 0.4; }
+.mark.hit { animation: markHit 380ms ease-out forwards; }
+.mark.miss .ring { stroke: var(--red); filter: drop-shadow(0 0 6px rgba(168,18,28,0.9)); }
+@keyframes waver { 0%,100% { transform: scaleY(-1) translateX(-1.5px) } 50% { transform: scaleY(-1) translateX(1.5px) } }
+@keyframes markHit { 0% { opacity: 1; transform: var(--tx) scale(1); } 100% { opacity: 0; transform: var(--tx) scale(1.9); } }
+.pulse { position: absolute; left: 0; top: 0; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%;
+  border: 1px solid var(--bone); pointer-events: none; opacity: 0; }
+.pulse.go { animation: pulseOut 520ms ease-out forwards; }
+.pulse.bad { border-color: var(--red); }
+@keyframes pulseOut { 0% { opacity: 0.9; transform: scale(0.4);} 100% { opacity: 0; transform: scale(2.4);} }
+
+/* ---------- HUD ---------- */
+#hud { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 600ms ease; }
+#hud.on { opacity: 1; }
+.hud-top { position: absolute; top: calc(var(--sat) + 16px); right: calc(var(--sar) + 18px); text-align: right; }
+.hud-score { font-family: 'Cinzel', serif; font-size: 15px; letter-spacing: 0.22em; color: var(--bone); opacity: 0.9; }
+.hud-streak { font-family: 'EB Garamond', serif; font-style: italic; font-size: 14px; letter-spacing: 0.06em; color: var(--stone); opacity: 0.8; margin-top: 3px; min-height: 1.2em; }
+.hud-streak.hot { color: #f0d9b0; opacity: 1; }
+.hud-time { margin-top: 10px; }
+.hud-time .n { font-family: 'Cinzel', serif; font-size: 20px; letter-spacing: 0.2em; opacity: 0.85; font-variant-numeric: tabular-nums; display: block; }
+.hud-time .l { font-family: 'Marcellus SC', 'Cinzel', serif; font-size: 9px; letter-spacing: 0.3em; opacity: 0.45; display: block; margin-top: 1px; }
+/* the stability hairline: the fissure itself, top to tarn */
+.hud-meter { position: absolute; right: calc(var(--sar) + 24px); top: 50%; transform: translateY(-50%); width: 14px; height: 38vh; }
+.hud-meter .rail { position: absolute; left: 6px; top: 0; bottom: 0; width: 1px; background: rgba(233,227,211,0.22); }
+.hud-meter .fill { position: absolute; left: 5px; top: 0; width: 3px; height: 0%; background: linear-gradient(to bottom, #5c0a0f, var(--red), #ff3b2a);
+  box-shadow: 0 0 8px rgba(168,18,28,0.9), 0 0 2px #ff5a3a; transition: height 120ms linear; }
+.hud-meter .tick { position: absolute; left: 0; bottom: -2px; width: 13px; height: 1px; background: rgba(233,227,211,0.6); }
+.hud-meter .lbl { position: absolute; left: 50%; bottom: -22px; transform: translateX(-50%); font-family: 'Marcellus SC', serif; font-size: 9px; letter-spacing: 0.3em; opacity: 0.5; }
+.hud-meter .top { position: absolute; left: 50%; top: -22px; transform: translateX(-50%); font-family: 'Marcellus SC', serif; font-size: 9px; letter-spacing: 0.3em; opacity: 0.5; }
+.hud-hint { position: absolute; left: 50%; bottom: calc(var(--sab) + 18px); transform: translateX(-50%); white-space: nowrap;
+  font-family: 'EB Garamond', serif; font-style: italic; font-size: 15px; color: var(--stone); opacity: 0; transition: opacity 500ms; letter-spacing: 0.04em; }
+.hud-hint.on { opacity: 0.8; }
+
+/* ---------- overlays ---------- */
+.screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  padding: calc(var(--sat) + 24px) 24px calc(var(--sab) + 30px); text-align: center; pointer-events: none; }
+.screen[hidden] { display: none; }
+.screen > * { pointer-events: auto; }
+#title .kicker { position: absolute; top: calc(var(--sat) + 22px); left: 0; right: 0;
+  font-family: 'Marcellus SC', 'Cinzel', serif; font-size: 11px; letter-spacing: 0.42em; color: var(--bone); opacity: 0.55; }
+#title .kicker span { display: block; font-family: 'EB Garamond', serif; font-style: italic; font-size: 12px; letter-spacing: 0.12em; text-transform: none; opacity: 0.8; margin-top: 6px; }
+#title .word { font-family: 'Cinzel', 'Marcellus SC', serif; font-weight: 400; font-size: 30px; letter-spacing: 0.72em; text-indent: 0.72em; color: var(--bone);
+  text-shadow: 0 0 22px rgba(233,227,211,0.35), 0 0 2px rgba(0,0,0,0.9); margin: 0; }
+#title .word i { font-style: normal; color: #ff5a4a; text-shadow: 0 0 14px rgba(255,60,40,0.8); }
+#title .rule { width: 120px; height: 1px; background: linear-gradient(90deg, transparent, rgba(233,227,211,0.55), transparent); margin: 14px 0 12px; }
+#title .how { font-family: 'EB Garamond', serif; font-style: italic; font-size: 16px; line-height: 1.5; color: #b8bfc7; max-width: 32em; margin: 0; }
+#title .best { font-family: 'Marcellus SC', serif; font-size: 11px; letter-spacing: 0.3em; color: var(--stone); opacity: 0.75; margin: 12px 0 0; min-height: 1.2em; }
+.cta { font-family: 'Marcellus SC', 'Cinzel', serif; font-size: 12px; letter-spacing: 0.36em; color: var(--bone); background: none; border: 1px solid rgba(233,227,211,0.3);
+  padding: 12px 26px 11px 30px; margin-top: 18px; cursor: pointer; opacity: 0.85; transition: opacity 200ms, border-color 200ms, background 200ms; }
+.cta:hover, .cta:focus-visible { opacity: 1; border-color: rgba(233,227,211,0.7); background: rgba(233,227,211,0.06); }
+#title .cta { animation: breathe 3.2s ease-in-out infinite; }
+@keyframes breathe { 0%,100% { opacity: 0.55 } 50% { opacity: 1 } }
+
+.end { justify-content: center; background: radial-gradient(ellipse at center, rgba(6,7,10,0.0) 30%, rgba(6,7,10,0.55) 100%); opacity: 0; transition: opacity 1.4s ease; }
+.end.show { opacity: 1; }
+.end .verdict { font-family: 'Cinzel', serif; font-weight: 400; font-size: 22px; letter-spacing: 0.6em; text-indent: 0.6em; margin: 0 0 14px; color: var(--bone); }
+#lose .verdict { color: #e0a0a0; }
+.end .quote { font-family: 'EB Garamond', serif; font-style: italic; font-size: 19px; line-height: 1.5; color: #cfd4da; max-width: 30em; margin: 0; text-shadow: 0 1px 8px rgba(0,0,0,0.9); }
+.end .quote small { display: block; font-style: normal; font-size: 12px; letter-spacing: 0.2em; color: var(--stone); margin-top: 10px; font-family: 'Marcellus SC', serif; }
+.end .tally { font-family: 'Cinzel', serif; font-size: 14px; letter-spacing: 0.3em; margin-top: 22px; color: var(--bone); opacity: 0.9; }
+.end .tally b { font-weight: 400; color: #f0d9b0; }
+.end .newbest { font-family: 'Marcellus SC', serif; font-size: 11px; letter-spacing: 0.35em; color: #f0d9b0; margin-top: 6px; opacity: 0; }
+.end .newbest.on { opacity: 1; }
+
+#mute { position: fixed; z-index: 5; bottom: calc(var(--sab) + 12px); left: calc(var(--sal) + 12px); width: 40px; height: 40px; border-radius: 50%;
+  border: 1px solid rgba(233,227,211,0.22); background: rgba(6,7,10,0.45); color: var(--bone); font-family: 'Marcellus SC', serif; font-size: 11px; letter-spacing: 0.1em;
+  cursor: pointer; opacity: 0.55; }
+#mute:hover { opacity: 1; }
+#nogl { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; padding: 30px; text-align: center; font-style: italic; color: var(--stone); }
+
+@media (max-width: 520px) {
+  .mark { width: 64px; height: 64px; margin: -32px 0 0 -32px; }
+  #title .word { font-size: 24px; letter-spacing: 0.55em; text-indent: 0.55em; }
+  #title .how { font-size: 15px; }
+  #title .kicker { top: calc(var(--sat) + 66px); }
+  .hud-meter { right: calc(var(--sar) + 14px); height: 30vh; }
+  .hud-top { right: calc(var(--sar) + 14px); }
+  .hud-score { font-size: 13px; }
+  .end .quote { font-size: 17px; }
+  .end .verdict { font-size: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #title .cta { animation: none; opacity: 0.9; }
+  .mark.refl svg { animation: none; }
+}

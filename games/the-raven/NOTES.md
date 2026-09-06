@@ -26,12 +26,12 @@
 
 ## The look
 - Plate cream **#efe6d3**, ink **#0b0a09**; the one accent is the flame's dull gold **#b8902c**.
-- Cinzel (caption, HUD, buttons) · IM Fell English SC (card questions) · IM Fell English italic (narrator's line) · Pirata One (NEVERMORE, which draws itself on every croak).
+- IM Fell English SC (the title "The Raven" under the plate, card questions) · Cinzel (author/date caption, HUD, buttons) · IM Fell English italic (narrator's line, which sits on the plate's bottom margin) · Pirata One (NEVERMORE, which draws itself on every croak).
 
 ## Sound (all synthesized)
 Croak = two syllables of sawtooth+noise through three formant band-passes with a downward pitch sweep; wing flap = low-pass-swept noise bursts; lamp gutter, curtain rustle (high-passed noise swells), tapping between rounds, a rising struck note for each mercy (pitch climbs with the streak), a sub-bass thud for each shadow step, a soft relight.
 
 ## Known limits
-- On portrait phones the plate is cropped to the middle (viewBox `320 0 760 900`), so the window is off-screen; the dawn is shown there by the whole plate lightening and the bird leaving.
+- On portrait phones the plate is cropped to the middle (viewBox `350 0 780 900`, framed so the chair and the whole lamp with its halo stay in shot), so most of the window is off-screen; the dawn is shown there by the whole plate lightening and the bird leaving.
 - Card-swap on portrait is an instant reorder (flex `order`) with the rustle cue rather than an animated slide.
 - Reduced-motion: all draw-in and tremble animations are disabled; the flame does not animate down (the round timer still runs, the gutter cue still fires at 30%).
