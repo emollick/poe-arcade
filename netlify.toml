@@ -1,9 +1,9 @@
 # poe-arcade — Netlify configuration
 #
 # There is NO BUILD STEP. The repository is the deployable site: a fresh clone
-# with no toolchain installed deploys as-is. Any compiled artifact (e.g. a wasm
-# module) must be built locally and its OUTPUT COMMITTED under /wasm/, so this
-# stays true.
+# with no toolchain installed deploys as-is. Any compiled artifact (e.g. the
+# Black Cat's games/black-cat/sim.wasm) is built locally and its OUTPUT
+# COMMITTED beside the game, so this stays true.
 
 [build]
   publish = "."
@@ -50,20 +50,24 @@
     Cache-Control = "public, max-age=31536000, immutable"
     Access-Control-Allow-Origin = "*"
 
-# --- Correct types for wasm, should a /wasm/ folder appear later -------------
+# --- Correct type for wasm ----------------------------------------------------
 # Streaming instantiation (WebAssembly.instantiateStreaming) REQUIRES
-# application/wasm; without it the browser refuses the module.
-
-[[headers]]
-  for = "/wasm/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
+# application/wasm; without it the browser falls back to a slower path or
+# refuses the module. The wasm sits beside its game (games/black-cat/sim.wasm)
+# under a URL with no content hash, so it deliberately gets NO immutable
+# Cache-Control here: the /games/* rule above keeps it revalidated, and a
+# rebuilt sim.wasm is picked up on the next visit. The exact-path rule is the
+# belt to the wildcard's braces.
 
 [[headers]]
   for = "/*.wasm"
   [headers.values]
     Content-Type = "application/wasm"
-    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/games/black-cat/sim.wasm"
+  [headers.values]
+    Content-Type = "application/wasm"
 
 # --- Site-wide safety headers ------------------------------------------------
 # Deliberately NOT set: Cross-Origin-Opener-Policy / Cross-Origin-Embedder-Policy.
